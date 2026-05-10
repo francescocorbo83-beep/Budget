@@ -41,6 +41,14 @@ function saveLocalData() {
 
 // Update state from external source (Google Drive)
 window.updateStateFromCloud = function(cloudState) {
+    if (typeof cloudState === 'string') {
+        try {
+            cloudState = JSON.parse(cloudState);
+        } catch(e) {
+            console.error('Errore parsing JSON da Drive:', e);
+            return;
+        }
+    }
     if (cloudState && cloudState.categories) {
         state = cloudState;
         localStorage.setItem('nexbudget_data', JSON.stringify(state));

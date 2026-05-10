@@ -169,7 +169,10 @@ async function downloadData() {
             alt: 'media'
         });
         
-        const cloudData = response.result;
+        let cloudData = response.result;
+        if (typeof response.body === 'string') {
+            try { cloudData = JSON.parse(response.body); } catch(e){}
+        }
         
         // Pass data to app state
         if (window.updateStateFromCloud) {
@@ -188,18 +191,15 @@ window.gdriveSyncData = async function(stateData) {
     
     setSyncStatus('Salvataggio...', 'syncing');
     try {
-        const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
-        await fetch(url, {
+        await gapi.client.request({
+            path: `/upload/drive/v3/files/${fileId}`,
             method: 'PATCH',
-            headers: new Headers({
-                'Authorization': 'Bearer ' + gapi.client.getToken().access_token,
-                'Content-Type': 'application/json'
-            }),
+            params: { uploadType: 'media' },
             body: JSON.stringify(stateData)
         });
         setSyncStatus('Sincronizzato', 'synced');
     } catch (e) {
-        console.error(e);
+        console.error("Error syncing file", e);
         setSyncStatus('Errore sync', 'error');
     }
 };
