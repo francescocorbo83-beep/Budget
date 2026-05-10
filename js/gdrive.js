@@ -1,6 +1,6 @@
 // Google Drive API Integration
-const CLIENT_ID = 642665881666-bf2goer6t91ot88bcv26uimm4atjr3dp.apps.googleusercontent.com;
-const API_KEY = AIzaSyDzlAur8-gZ9O535To39vWJjIy5lnq2MBs;
+const CLIENT_ID = '642665881666-bf2goer6t91ot88bcv26uimm4atjr3dp.apps.googleusercontent.com';
+const API_KEY = 'AIzaSyDzlAur8-gZ9O535To39vWJjIy5lnq2MBs';
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
