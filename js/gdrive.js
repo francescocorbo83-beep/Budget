@@ -113,10 +113,14 @@ function setSyncStatus(text, className) {
 async function findOrCreateConfigFile() {
     setSyncStatus('Sincronizzazione...', 'syncing');
     try {
-        const response = await gapi.client.drive.files.list({
-            q: "name='budget_data.json' and trashed=false",
-            fields: 'files(id, name)',
-            spaces: 'drive'
+        const response = await gapi.client.request({
+            path: '/drive/v3/files',
+            method: 'GET',
+            params: {
+                q: "name='budget_data.json' and trashed=false",
+                fields: 'files(id, name)',
+                spaces: 'drive'
+            }
         });
 
         const files = response.result.files;
@@ -129,7 +133,7 @@ async function findOrCreateConfigFile() {
         }
     } catch (err) {
         console.error("Error finding file", err);
-        setSyncStatus('Errore', 'error');
+        setSyncStatus('Errore List', 'error');
     }
 }
 
@@ -140,20 +144,20 @@ async function createConfigFile() {
     };
     
     try {
-        // Need to use multipart/related to upload data with metadata via fetch since gapi.client.drive doesn't easily support multipart media upload
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        
-        // Use current local state or default empty
         const localData = localStorage.getItem('nexbudget_data') || '{"categories":[],"transactions":[]}';
         form.append('file', new Blob([localData], { type: 'application/json' }));
         
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
             method: 'POST',
             headers: new Headers({ 'Authorization': 'Bearer ' + gapi.client.getToken().access_token }),
             body: form
         });
-        const data = await res.json();
+        
+        const data = await response.json();
+        if(data.error) throw data.error;
+        
         fileId = data.id;
         setSyncStatus('Sincronizzato', 'synced');
     } catch(e) {
