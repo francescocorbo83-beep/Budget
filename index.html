@@ -280,6 +280,21 @@
                             <button type="submit" class="btn btn-primary" style="margin-top: 1rem;"><i class="fa-solid fa-cloud-arrow-up"></i> Salva Credenziali Cloud</button>
                         </form>
                     </div>
+
+                    <div class="export-setup glass-panel" style="margin-top: 2rem; padding: 1.5rem;">
+                        <h4>Esportazione Dati (Analisi Calcoli)</h4>
+                        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                            Scarica un file CSV con l'esplosione analitica di tutti i calcoli e le ricorrenze generati per un anno specifico. 
+                            Ideale per verificare i totali in Excel tramite tabelle pivot.
+                        </p>
+                        <div class="form-group" style="display: flex; gap: 1rem; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <label for="export-csv-year">Anno di analisi</label>
+                                <input type="number" id="export-csv-year" min="2000" max="2100" style="width: 100px;">
+                            </div>
+                            <button class="btn btn-primary" id="btn-export-csv"><i class="fa-solid fa-file-csv"></i> Scarica CSV Dettagliato</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
