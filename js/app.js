@@ -14,6 +14,8 @@ let state = {
     lastSync: null
 };
 
+let annualChartInstance = null;
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     loadLocalData();
@@ -407,6 +409,27 @@ function getHitsInYear(startDateStr, frequency, targetYear) {
     return hits;
 }
 
+function isTxInMonth(tx, targetYear, targetMonth) {
+    const txDate = new Date(tx.date);
+    const txYear = txDate.getFullYear();
+    const txMonth = txDate.getMonth() + 1;
+    
+    // Non considerare transazioni future
+    if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
+        return false;
+    }
+
+    const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
+
+    if (tx.frequency === 'one-time') return monthDiff === 0;
+    if (tx.frequency === 'monthly') return true;
+    if (tx.frequency === 'bimonthly') return monthDiff % 2 === 0;
+    if (tx.frequency === 'quarterly') return monthDiff % 3 === 0;
+    if (tx.frequency === 'semiannual') return monthDiff % 6 === 0;
+    if (tx.frequency === 'annual') return monthDiff % 12 === 0;
+    return false;
+}
+
 // Dashboard Calculation
 function updateDashboard() {
     const period = document.getElementById('filter-period').value;
@@ -418,27 +441,7 @@ function updateDashboard() {
     // Filter by date
     if (period === 'monthly' && filterMonth) {
         const [targetYear, targetMonth] = filterMonth.split('-').map(Number);
-        
-        txs = txs.filter(t => {
-            const txDate = new Date(t.date);
-            const txYear = txDate.getFullYear();
-            const txMonth = txDate.getMonth() + 1;
-            
-            // Non considerare transazioni future
-            if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
-                return false;
-            }
-
-            const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
-
-            if (t.frequency === 'one-time') return monthDiff === 0;
-            if (t.frequency === 'monthly') return true;
-            if (t.frequency === 'bimonthly') return monthDiff % 2 === 0;
-            if (t.frequency === 'quarterly') return monthDiff % 3 === 0;
-            if (t.frequency === 'semiannual') return monthDiff % 6 === 0;
-            if (t.frequency === 'annual') return monthDiff % 12 === 0;
-            return false;
-        });
+        txs = txs.filter(t => isTxInMonth(t, targetYear, targetMonth));
     } else if (period === 'annual' && filterYear) {
         const targetYear = parseInt(filterYear);
         txs = txs.filter(t => {
@@ -588,4 +591,172 @@ function updateDashboard() {
         incText.style.color = '';
         incText.style.fontWeight = '';
     }
+
+    updateAnnualChart();
+}
+
+function updateAnnualChart() {
+    const ctx = document.getElementById('annualChart');
+    if (!ctx) return;
+
+    let targetYear = document.getElementById('filter-year').value;
+    const period = document.getElementById('filter-period').value;
+    if (period === 'monthly') {
+        targetYear = document.getElementById('filter-month').value.split('-')[0];
+    }
+    targetYear = parseInt(targetYear);
+
+    const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    
+    // Inizializza array vuoti
+    const dataIncCons = new Array(12).fill(0);
+    const dataIncPrev = new Array(12).fill(0);
+    const dataExpCons = new Array(12).fill(0);
+    const dataExpPrev = new Array(12).fill(0);
+    const dataCashflow = new Array(12).fill(0);
+
+    // Calcola i totali per ogni singolo mese
+    state.transactions.forEach(t => {
+        for (let m = 1; m <= 12; m++) {
+            if (isTxInMonth(t, targetYear, m)) {
+                if (t.type === 'income') {
+                    if (t.nature === 'consuntivo') dataIncCons[m-1] += t.amount;
+                    else dataIncPrev[m-1] += t.amount;
+                } else {
+                    if (t.nature === 'consuntivo') dataExpCons[m-1] += t.amount;
+                    else dataExpPrev[m-1] += t.amount;
+                }
+            }
+        }
+    });
+
+    // Calcolo Cashflow
+    for (let i = 0; i < 12; i++) {
+        dataCashflow[i] = dataIncCons[i] - dataExpCons[i];
+        // Convertiamo le uscite in negativo per il grafico a specchio
+        dataExpCons[i] = -dataExpCons[i];
+        dataExpPrev[i] = -dataExpPrev[i];
+    }
+
+    if (annualChartInstance) {
+        annualChartInstance.destroy();
+    }
+
+    annualChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Cashflow Netto (Reale)',
+                    data: dataCashflow,
+                    borderColor: '#f59e0b',
+                    backgroundColor: '#f59e0b',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    order: 0
+                },
+                {
+                    type: 'bar',
+                    label: 'Entrate Reali',
+                    data: dataIncCons,
+                    backgroundColor: '#10b981',
+                    borderRadius: 4,
+                    order: 2
+                },
+                {
+                    type: 'bar',
+                    label: 'Uscite Reali',
+                    data: dataExpCons,
+                    backgroundColor: '#ef4444',
+                    borderRadius: 4,
+                    order: 3
+                },
+                {
+                    type: 'line',
+                    label: 'Entrate Prev.',
+                    data: dataIncPrev,
+                    borderColor: 'rgba(16, 185, 129, 0.5)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'Uscite Prev.',
+                    data: dataExpPrev,
+                    borderColor: 'rgba(239, 68, 68, 0.5)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: '#94a3b8',
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)'
+                    },
+                    ticks: {
+                        color: '#94a3b8'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        zeroLineColor: 'rgba(255, 255, 255, 0.2)'
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        callback: function(value) {
+                            return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0 }).format(value);
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
