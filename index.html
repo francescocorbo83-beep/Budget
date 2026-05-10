@@ -262,9 +262,23 @@
                         <button class="btn btn-secondary" id="btn-force-sync"><i class="fa-solid fa-rotate"></i> Forza Sincronizzazione</button>
                         <button class="btn btn-danger" id="btn-clear-data"><i class="fa-solid fa-trash"></i> Cancella Dati Locali</button>
                     </div>
-                    <div class="cloud-setup">
-                        <h4>Guida per Configurazione Google Cloud</h4>
-                        <p>Per abilitare l'accesso a Google Drive, è necessario inserire il <b>Client ID</b> dell'applicazione e la <b>API Key</b> (se necessario) nel file `js/gdrive.js`.</p>
+                    <div class="cloud-setup glass-panel" style="margin-top: 2rem; padding: 1.5rem;">
+                        <h4>Configurazione Google Cloud (BYOK)</h4>
+                        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                            Per abilitare la sincronizzazione con Google Drive senza esporre le tue chiavi pubbliche, inseriscile qui sotto. 
+                            Le chiavi verranno salvate esclusivamente nella memoria locale di questo browser. <b>Se svuoti la cache, dovrai reinserirle.</b>
+                        </p>
+                        <form id="form-cloud-credentials">
+                            <div class="form-group">
+                                <label>Google API Key</label>
+                                <input type="password" id="settings-api-key" placeholder="AIzaSy...">
+                            </div>
+                            <div class="form-group">
+                                <label>OAuth Client ID</label>
+                                <input type="password" id="settings-client-id" placeholder="...apps.googleusercontent.com">
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="margin-top: 1rem;"><i class="fa-solid fa-cloud-arrow-up"></i> Salva Credenziali Cloud</button>
+                        </form>
                     </div>
                 </div>
             </div>
