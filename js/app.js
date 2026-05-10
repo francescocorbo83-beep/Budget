@@ -735,7 +735,7 @@ function updateAnnualChart() {
             },
             scales: {
                 x: {
-                    stacked: true,
+                    stacked: false,
                     grid: {
                         color: 'rgba(255, 255, 255, 0.05)'
                     },
@@ -744,7 +744,7 @@ function updateAnnualChart() {
                     }
                 },
                 y: {
-                    stacked: true,
+                    stacked: false,
                     grid: {
                         color: 'rgba(255, 255, 255, 0.05)',
                         zeroLineColor: 'rgba(255, 255, 255, 0.2)'
