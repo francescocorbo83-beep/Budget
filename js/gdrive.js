@@ -168,25 +168,42 @@ async function createConfigFile() {
 
 async function downloadData() {
     try {
-        const response = await gapi.client.request({
-            path: `/drive/v3/files/${fileId}`,
-            method: 'GET',
-            params: { alt: 'media' }
+        // Tentativo con Fetch (più pulito per i JSON)
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+        const res = await fetch(url, {
+            headers: new Headers({ 'Authorization': 'Bearer ' + gapi.client.getToken().access_token })
         });
         
-        processDownloadedData(response.body || response.result);
-        
-    } catch (err) {
-        // Bug di Google API: se il file è JSON e non riesce a parsarlo internamente,
-        // lancia un errore pur avendo status 200. I dati veri sono in err.body!
-        if (err && err.status === 200 && err.body) {
-            console.log("Recupero dati da falso errore gapi...");
-            processDownloadedData(err.body);
-            return;
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
         }
         
-        console.error("Error downloading file", err);
-        setSyncStatus('Errore GAPI', 'error');
+        const textData = await res.text();
+        processDownloadedData(textData);
+        
+    } catch (err) {
+        console.error("Fetch fallita, tento GAPI...", err);
+        
+        try {
+            // Tentativo di emergenza con GAPI
+            const response = await gapi.client.request({
+                path: `/drive/v3/files/${fileId}`,
+                method: 'GET',
+                params: { alt: 'media' }
+            });
+            processDownloadedData(response.body || response.result);
+            
+        } catch (err2) {
+            if (err2 && err2.status === 200 && err2.body) {
+                processDownloadedData(err2.body);
+                return;
+            }
+            console.error("GAPI fallita:", err2);
+            // Mostriamo l'errore esatto nell'icona in alto a destra!
+            let msg = err.message || 'CORS';
+            if(err2.status) msg = `API ${err2.status}`;
+            setSyncStatus(`Errore: ${msg}`, 'error');
+        }
     }
 }
 
