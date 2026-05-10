@@ -396,6 +396,84 @@ body {
 .fill-income { background: var(--success); }
 .fill-expense { background: var(--danger); }
 
+/* Category Details */
+.btn-toggle-details {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: color 0.3s ease;
+    width: 100%;
+    justify-content: center;
+    padding: 0.5rem;
+}
+
+.btn-toggle-details:hover {
+    color: var(--text-primary);
+}
+
+.btn-toggle-details i {
+    transition: transform 0.3s ease;
+}
+
+.btn-toggle-details.open i {
+    transform: rotate(180deg);
+}
+
+.category-details {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.cat-progress-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.cat-progress-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    align-items: center;
+}
+
+.cat-progress-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-primary);
+}
+
+.cat-progress-amounts {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.cat-progress-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cat-progress-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* Transactions Table */
 .section-header {
     display: flex;
