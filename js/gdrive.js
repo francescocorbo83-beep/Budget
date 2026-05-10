@@ -168,31 +168,40 @@ async function createConfigFile() {
 
 async function downloadData() {
     try {
-        const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-        const res = await fetch(url, {
-            headers: new Headers({ 'Authorization': 'Bearer ' + gapi.client.getToken().access_token })
+        const response = await gapi.client.request({
+            path: `/drive/v3/files/${fileId}`,
+            method: 'GET',
+            params: { alt: 'media' }
         });
         
-        if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
-        }
+        processDownloadedData(response.body || response.result);
         
-        const textData = await res.text();
-        let cloudData = null;
-        try {
-            cloudData = JSON.parse(textData || '{}');
-        } catch(e) {
-            console.warn("Il file su Drive è vuoto o corrotto, uso dati di default.");
-        }
-        
-        if (window.updateStateFromCloud && cloudData) {
-            window.updateStateFromCloud(cloudData);
-        }
-        setSyncStatus('Sincronizzato', 'synced');
     } catch (err) {
+        // Bug di Google API: se il file è JSON e non riesce a parsarlo internamente,
+        // lancia un errore pur avendo status 200. I dati veri sono in err.body!
+        if (err && err.status === 200 && err.body) {
+            console.log("Recupero dati da falso errore gapi...");
+            processDownloadedData(err.body);
+            return;
+        }
+        
         console.error("Error downloading file", err);
-        setSyncStatus('Errore Download Fetch', 'error');
+        setSyncStatus('Errore GAPI', 'error');
     }
+}
+
+function processDownloadedData(rawData) {
+    let cloudData = null;
+    if (typeof rawData === 'string') {
+        try { cloudData = JSON.parse(rawData || '{}'); } catch(e){}
+    } else if (rawData) {
+        cloudData = rawData;
+    }
+    
+    if (window.updateStateFromCloud && cloudData) {
+        window.updateStateFromCloud(cloudData);
+    }
+    setSyncStatus('Sincronizzato', 'synced');
 }
 
 // Expose to app.js to trigger on save
