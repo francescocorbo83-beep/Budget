@@ -237,6 +237,16 @@ function initUI() {
         });
     }
 
+    // Export CSV
+    const exportYearInput = document.getElementById('export-csv-year');
+    if (exportYearInput) {
+        exportYearInput.value = new Date().getFullYear();
+    }
+    const btnExportCSV = document.getElementById('btn-export-csv');
+    if (btnExportCSV) {
+        btnExportCSV.addEventListener('click', exportYearlyDataToCSV);
+    }
+
     // Category Details Toggles
     const toggleExp = document.getElementById('btn-toggle-expense');
     if(toggleExp) {
@@ -926,4 +936,77 @@ function updateAnnualChart() {
             }
         }
     });
+}
+
+// Export Functionality
+function exportYearlyDataToCSV() {
+    const targetYearInput = document.getElementById('export-csv-year');
+    if (!targetYearInput || !targetYearInput.value) {
+        alert("Inserisci un anno valido.");
+        return;
+    }
+    
+    const targetYear = parseInt(targetYearInput.value);
+    
+    // Intestazioni
+    const headers = [
+        "Anno di Analisi", 
+        "Mese Competenza", 
+        "Data Registrazione", 
+        "Titolo", 
+        "Categoria", 
+        "Tipo", 
+        "Natura", 
+        "Frequenza", 
+        "Importo"
+    ];
+    
+    const rows = [];
+    rows.push(headers.join(";"));
+    
+    state.transactions.forEach(t => {
+        const cat = state.categories.find(c => c.id === t.categoryId);
+        const catName = cat ? cat.name : "N/D";
+        
+        // Formattazione per Excel CSV: 
+        // Usiamo il punto e virgola come separatore per l'Europa
+        // ed evitiamo i ritorni a capo
+        const titleSafe = `"${t.title.replace(/"/g, '""').replace(/\n/g, ' ')}"`;
+        const catNameSafe = `"${catName.replace(/"/g, '""')}"`;
+        const typeStr = t.type === 'income' ? 'Entrata' : 'Uscita';
+        const natureStr = t.nature === 'preventivo' ? 'Budget' : 'Consuntivo';
+        
+        for (let m = 1; m <= 12; m++) {
+            if (isTxInMonth(t, targetYear, m)) {
+                const amountSign = t.type === 'income' ? t.amount : -t.amount;
+                // Formatta importo con la virgola per i decimali, standard europeo
+                const amountFormatted = amountSign.toFixed(2).replace('.', ',');
+                
+                const row = [
+                    targetYear,
+                    m,
+                    t.date,
+                    titleSafe,
+                    catNameSafe,
+                    typeStr,
+                    natureStr,
+                    t.frequency,
+                    amountFormatted
+                ];
+                rows.push(row.join(";"));
+            }
+        }
+    });
+    
+    // Aggiungiamo il BOM UTF-8 all'inizio affinché Excel legga correttamente gli accenti
+    const csvContent = "\uFEFF" + rows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `NexBudget_Analisi_${targetYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
