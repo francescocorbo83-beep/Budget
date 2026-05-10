@@ -120,6 +120,10 @@
                         <div class="progress-bar-bg">
                             <div class="progress-bar fill-expense" id="progress-expense" style="width: 0%"></div>
                         </div>
+                        <button class="btn-toggle-details" id="btn-toggle-expense" style="margin-top: 0.5rem;">
+                            <i class="fa-solid fa-chevron-down"></i> Dettaglio Categorie
+                        </button>
+                        <div id="details-expense" class="category-details hidden"></div>
                     </div>
                     <h3 style="margin-top: 1.5rem;">Avanzamento Consuntivo vs Preventivo (Entrate)</h3>
                     <div class="progress-container">
@@ -130,6 +134,10 @@
                         <div class="progress-bar-bg">
                             <div class="progress-bar fill-income" id="progress-income" style="width: 0%"></div>
                         </div>
+                        <button class="btn-toggle-details" id="btn-toggle-income" style="margin-top: 0.5rem;">
+                            <i class="fa-solid fa-chevron-down"></i> Dettaglio Categorie
+                        </button>
+                        <div id="details-income" class="category-details hidden"></div>
                     </div>
                 </div>
             </div>
@@ -229,6 +237,9 @@
                         <select id="tx-frequency" required>
                             <option value="one-time">Una Tantum</option>
                             <option value="monthly">Mensile</option>
+                            <option value="bimonthly">Bimestrale</option>
+                            <option value="quarterly">Trimestrale</option>
+                            <option value="semiannual">Semestrale</option>
                             <option value="annual">Annuale</option>
                         </select>
                     </div>
