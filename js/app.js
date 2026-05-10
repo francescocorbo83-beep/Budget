@@ -150,6 +150,23 @@ function initUI() {
         }
     });
 
+    // Category Details Toggles
+    const toggleExp = document.getElementById('btn-toggle-expense');
+    if(toggleExp) {
+        toggleExp.addEventListener('click', () => {
+            toggleExp.classList.toggle('open');
+            document.getElementById('details-expense').classList.toggle('hidden');
+        });
+    }
+
+    const toggleInc = document.getElementById('btn-toggle-income');
+    if(toggleInc) {
+        toggleInc.addEventListener('click', () => {
+            toggleInc.classList.toggle('open');
+            document.getElementById('details-income').classList.toggle('hidden');
+        });
+    }
+
     // Render Initial Data
     renderTransactions();
     renderCategories();
@@ -248,8 +265,19 @@ function renderTransactions() {
             <td><strong>${tx.title}</strong></td>
             <td><span class="badge badge-cat" style="background: ${cat.color}40; color: ${cat.color}"><i class="${cat.icon}"></i> ${cat.name}</span></td>
             <td><span class="badge ${tx.type === 'income' ? 'badge-income' : 'badge-expense'}">${tx.type === 'income' ? 'Entrata' : 'Uscita'}</span></td>
-            <td><span class="badge ${tx.nature === 'preventivo' ? 'badge-prev' : 'badge-cons'}">${tx.nature === 'preventivo' ? 'Budget' : 'Consuntivo'}</span></td>
-            <td>${tx.frequency === 'one-time' ? 'Una Tantum' : tx.frequency === 'monthly' ? 'Mensile' : 'Annuale'}</td>
+            <td>
+                <span class="badge ${tx.nature === 'preventivo' ? 'badge-prev' : 'badge-cons'}">${tx.nature === 'preventivo' ? 'Budget' : 'Consuntivo'}</span>
+            </td>
+            <td>
+                ${
+                    tx.frequency === 'one-time' ? 'Una Tantum' : 
+                    tx.frequency === 'monthly' ? 'Mensile' : 
+                    tx.frequency === 'bimonthly' ? 'Bimestrale' : 
+                    tx.frequency === 'quarterly' ? 'Trimestrale' : 
+                    tx.frequency === 'semiannual' ? 'Semestrale' : 
+                    'Annuale'
+                }
+            </td>
             <td style="font-weight: bold; color: ${tx.type === 'income' ? 'var(--success)' : 'var(--danger)'}">
                 ${tx.type === 'income' ? '+' : '-'}€${tx.amount.toFixed(2)}
             </td>
@@ -345,6 +373,40 @@ function renderCategories() {
     });
 }
 
+function getHitsInYear(startDateStr, frequency, targetYear) {
+    const startDate = new Date(startDateStr);
+    const startYear = startDate.getFullYear();
+    const startMonth = startDate.getMonth() + 1; // 1-12
+    
+    if (startYear > targetYear) return 0;
+    
+    if (frequency === 'one-time') {
+        return startYear === targetYear ? 1 : 0;
+    }
+    
+    let stepMonths = 1;
+    if (frequency === 'bimonthly') stepMonths = 2;
+    if (frequency === 'quarterly') stepMonths = 3;
+    if (frequency === 'semiannual') stepMonths = 6;
+    if (frequency === 'annual') stepMonths = 12;
+
+    let currentYear = startYear;
+    let currentMonth = startMonth;
+    let hits = 0;
+    
+    while (currentYear <= targetYear) {
+        if (currentYear === targetYear) {
+            hits++;
+        }
+        currentMonth += stepMonths;
+        if (currentMonth > 12) {
+            currentYear += Math.floor((currentMonth - 1) / 12);
+            currentMonth = ((currentMonth - 1) % 12) + 1;
+        }
+    }
+    return hits;
+}
+
 // Dashboard Calculation
 function updateDashboard() {
     const period = document.getElementById('filter-period').value;
@@ -355,37 +417,131 @@ function updateDashboard() {
 
     // Filter by date
     if (period === 'monthly' && filterMonth) {
+        const [targetYear, targetMonth] = filterMonth.split('-').map(Number);
+        
         txs = txs.filter(t => {
-            // Include if it's matching month, or if it's a recurring monthly transaction
-            // Simplification: just matching the date string prefix for now
-            return t.date.startsWith(filterMonth) || (t.frequency === 'monthly' && new Date(t.date) <= new Date(filterMonth + '-31'));
+            const txDate = new Date(t.date);
+            const txYear = txDate.getFullYear();
+            const txMonth = txDate.getMonth() + 1;
+            
+            // Non considerare transazioni future
+            if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
+                return false;
+            }
+
+            const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
+
+            if (t.frequency === 'one-time') return monthDiff === 0;
+            if (t.frequency === 'monthly') return true;
+            if (t.frequency === 'bimonthly') return monthDiff % 2 === 0;
+            if (t.frequency === 'quarterly') return monthDiff % 3 === 0;
+            if (t.frequency === 'semiannual') return monthDiff % 6 === 0;
+            if (t.frequency === 'annual') return monthDiff % 12 === 0;
+            return false;
         });
     } else if (period === 'annual' && filterYear) {
+        const targetYear = parseInt(filterYear);
         txs = txs.filter(t => {
-            return t.date.startsWith(filterYear) || (t.frequency === 'annual' && new Date(t.date).getFullYear() <= parseInt(filterYear)) || t.frequency === 'monthly';
+            const txYear = new Date(t.date).getFullYear();
+            if (txYear > targetYear) return false;
+            if (t.frequency === 'one-time') return txYear === targetYear;
+            return true; // Le periodiche iniziate quest'anno o prima le includiamo
         });
     }
 
     let incomePrev = 0, incomeCons = 0;
     let expensePrev = 0, expenseCons = 0;
+    
+    // Oggetto per memorizzare i totali raggruppati per categoria
+    const catTotals = {};
 
     txs.forEach(t => {
         let amount = t.amount;
         
-        // Basic frequency multiplication if viewing annual but tx is monthly
-        if (period === 'annual' && t.frequency === 'monthly') {
-            // If the transaction started this year, multiply by remaining months. Simplification: * 12
-            amount = amount * 12; 
+        // Moltiplichiamo l'importo per il numero di occorrenze nell'anno se la vista è annuale
+        if (period === 'annual') {
+            const targetYear = parseInt(filterYear);
+            const hits = getHitsInYear(t.date, t.frequency, targetYear);
+            amount = amount * hits;
+        }
+
+        // Inizializza l'oggetto categoria se non esiste
+        if (!catTotals[t.categoryId]) {
+            catTotals[t.categoryId] = {
+                prev: 0,
+                cons: 0,
+                type: t.type
+            };
         }
 
         if (t.type === 'income') {
-            if (t.nature === 'preventivo') incomePrev += amount;
-            else incomeCons += amount;
+            if (t.nature === 'preventivo') {
+                incomePrev += amount;
+                catTotals[t.categoryId].prev += amount;
+            } else {
+                incomeCons += amount;
+                catTotals[t.categoryId].cons += amount;
+            }
         } else {
-            if (t.nature === 'preventivo') expensePrev += amount;
-            else expenseCons += amount;
+            if (t.nature === 'preventivo') {
+                expensePrev += amount;
+                catTotals[t.categoryId].prev += amount;
+            } else {
+                expenseCons += amount;
+                catTotals[t.categoryId].cons += amount;
+            }
         }
     });
+
+    // Generate HTML for Category Details
+    const detailsExpenseDiv = document.getElementById('details-expense');
+    const detailsIncomeDiv = document.getElementById('details-income');
+    let expenseHtml = '';
+    let incomeHtml = '';
+
+    Object.keys(catTotals).forEach(catId => {
+        const cat = state.categories.find(c => c.id === catId);
+        if (!cat) return;
+        
+        const totals = catTotals[catId];
+        if (totals.prev === 0 && totals.cons === 0) return;
+
+        const percent = totals.prev > 0 ? (totals.cons / totals.prev) * 100 : 0;
+        const width = Math.min(percent, 100);
+        
+        let textStyle = '';
+        if (percent > 100) {
+            textStyle = totals.type === 'expense' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
+        }
+
+        const html = `
+            <div class="cat-progress-item">
+                <div class="cat-progress-header">
+                    <div class="cat-progress-name">
+                        <i class="${cat.icon}" style="color: ${cat.color}"></i> ${cat.name}
+                    </div>
+                    <div class="cat-progress-amounts" style="${textStyle}">
+                        €${totals.cons.toFixed(2)} / €${totals.prev.toFixed(2)} (${percent.toFixed(1)}%)
+                    </div>
+                </div>
+                <div class="cat-progress-bar-bg">
+                    <div class="cat-progress-bar" style="width: ${width}%; background-color: ${cat.color}"></div>
+                </div>
+            </div>
+        `;
+
+        if (totals.type === 'expense') {
+            expenseHtml += html;
+        } else {
+            incomeHtml += html;
+        }
+    });
+
+    if (expenseHtml === '') expenseHtml = '<div style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">Nessun dato per questo periodo</div>';
+    if (incomeHtml === '') incomeHtml = '<div style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">Nessun dato per questo periodo</div>';
+
+    if (detailsExpenseDiv) detailsExpenseDiv.innerHTML = expenseHtml;
+    if (detailsIncomeDiv) detailsIncomeDiv.innerHTML = incomeHtml;
 
     // Update DOM
     document.getElementById('dash-income-prev').textContent = `€ ${incomePrev.toFixed(2)}`;
@@ -400,13 +556,36 @@ function updateDashboard() {
     document.getElementById('dash-balance-prev').textContent = `€ ${balancePrev.toFixed(2)}`;
     document.getElementById('dash-balance-cons').textContent = `€ ${balanceCons.toFixed(2)}`;
 
-    // Progress Bars
-    const expensePercent = expensePrev > 0 ? Math.min((expenseCons / expensePrev) * 100, 100) : 0;
-    const incomePercent = incomePrev > 0 ? Math.min((incomeCons / incomePrev) * 100, 100) : 0;
+    // Progress Bars - Allow percentages over 100%
+    const expenseTruePercent = expensePrev > 0 ? (expenseCons / expensePrev) * 100 : 0;
+    const incomeTruePercent = incomePrev > 0 ? (incomeCons / incomePrev) * 100 : 0;
 
-    document.getElementById('progress-expense').style.width = `${expensePercent}%`;
-    document.getElementById('progress-expense-text').textContent = `${expensePercent.toFixed(1)}%`;
+    // Cap visual width at 100% to prevent CSS overflow
+    const expenseWidth = Math.min(expenseTruePercent, 100);
+    const incomeWidth = Math.min(incomeTruePercent, 100);
 
-    document.getElementById('progress-income').style.width = `${incomePercent}%`;
-    document.getElementById('progress-income-text').textContent = `${incomePercent.toFixed(1)}%`;
+    document.getElementById('progress-expense').style.width = `${expenseWidth}%`;
+    const expText = document.getElementById('progress-expense-text');
+    expText.textContent = `${expenseTruePercent.toFixed(1)}%`;
+    
+    // Alert visivo per sforamento budget (rosso per uscite, verde per entrate extra)
+    if (expenseTruePercent > 100) {
+        expText.style.color = 'var(--danger)';
+        expText.style.fontWeight = 'bold';
+    } else {
+        expText.style.color = '';
+        expText.style.fontWeight = '';
+    }
+
+    document.getElementById('progress-income').style.width = `${incomeWidth}%`;
+    const incText = document.getElementById('progress-income-text');
+    incText.textContent = `${incomeTruePercent.toFixed(1)}%`;
+    
+    if (incomeTruePercent > 100) {
+        incText.style.color = 'var(--success)';
+        incText.style.fontWeight = 'bold';
+    } else {
+        incText.style.color = '';
+        incText.style.fontWeight = '';
+    }
 }
