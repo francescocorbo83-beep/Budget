@@ -1,6 +1,18 @@
 // Google Drive API Integration
-const CLIENT_ID = '642665881666-bf2goer6t91ot88bcv26uimm4atjr3dp.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyDzlAur8-gZ9O535To39vWJjIy5lnq2MBs';
+let CLIENT_ID = '';
+let API_KEY = '';
+
+function loadCloudKeys() {
+    const savedKeysStr = localStorage.getItem('nexbudget_gdrive_keys');
+    if (savedKeysStr) {
+        try {
+            const keys = JSON.parse(savedKeysStr);
+            CLIENT_ID = keys.clientId || '';
+            API_KEY = keys.apiKey || '';
+        } catch(e) {}
+    }
+}
+loadCloudKeys();
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
@@ -18,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load the Google API Client Library
 function gapiLoaded() {
+    if (!API_KEY) return;
     gapi.load('client', initializeGapiClient);
 }
 
@@ -36,6 +49,7 @@ async function initializeGapiClient() {
 
 // Load the Google Identity Services Client
 function gisLoaded() {
+    if (!CLIENT_ID) return;
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
@@ -57,8 +71,8 @@ window.gapiLoaded = gapiLoaded;
 window.gisLoaded = gisLoaded;
 
 function handleAuthClick() {
-    if(CLIENT_ID.includes('INSERISCI_QUI')) {
-        alert("Configurazione mancante: Devi inserire il CLIENT_ID nel file js/gdrive.js");
+    if(!CLIENT_ID || !API_KEY) {
+        alert('Devi prima configurare API Key e Client ID nelle Impostazioni!');
         return;
     }
     

@@ -209,6 +209,34 @@ function initUI() {
         }
     });
 
+    // Cloud Credentials (BYOK)
+    const savedKeysStr = localStorage.getItem('nexbudget_gdrive_keys');
+    if (savedKeysStr) {
+        try {
+            const keys = JSON.parse(savedKeysStr);
+            if (keys.apiKey) document.getElementById('settings-api-key').value = keys.apiKey;
+            if (keys.clientId) document.getElementById('settings-client-id').value = keys.clientId;
+        } catch(e) { console.error('Errore lettura chiavi cloud'); }
+    }
+
+    const formCloud = document.getElementById('form-cloud-credentials');
+    if (formCloud) {
+        formCloud.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const apiKey = document.getElementById('settings-api-key').value.trim();
+            const clientId = document.getElementById('settings-client-id').value.trim();
+            
+            if (!apiKey || !clientId) {
+                alert('Entrambi i campi sono obbligatori per abilitare il Cloud.');
+                return;
+            }
+
+            localStorage.setItem('nexbudget_gdrive_keys', JSON.stringify({ apiKey, clientId }));
+            alert('Credenziali salvate correttamente! La pagina verrà ricaricata per avviare il motore Cloud.');
+            location.reload();
+        });
+    }
+
     // Category Details Toggles
     const toggleExp = document.getElementById('btn-toggle-expense');
     if(toggleExp) {
