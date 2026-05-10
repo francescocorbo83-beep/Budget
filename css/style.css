@@ -280,6 +280,7 @@ body {
     gap: 2rem;
     padding: 1.5rem;
     margin-bottom: 2rem;
+    flex-wrap: wrap;
 }
 
 .filter-group {
