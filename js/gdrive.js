@@ -126,28 +126,47 @@ function setSyncStatus(text, className) {
 // Drive Operations
 async function findOrCreateConfigFile() {
     setSyncStatus('Sincronizzazione...', 'syncing');
+    let files = null;
+    let lastError = '';
+    
     try {
-        const response = await gapi.client.request({
-            path: '/drive/v3/files',
+        const token = gapi.client.getToken().access_token;
+        const url = "https://www.googleapis.com/drive/v3/files?q=name='budget_data.json' and trashed=false&fields=files(id, name)&spaces=drive";
+        const response = await fetch(url, {
             method: 'GET',
-            params: {
-                q: "name='budget_data.json' and trashed=false",
-                fields: 'files(id, name)',
-                spaces: 'drive'
-            }
+            headers: new Headers({ 'Authorization': 'Bearer ' + token })
         });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        files = data.files;
+    } catch (fetchErr) {
+        console.warn("Fetch fallita per List, tento GAPI...", fetchErr);
+        try {
+            const response = await gapi.client.request({
+                path: '/drive/v3/files',
+                method: 'GET',
+                params: {
+                    q: "name='budget_data.json' and trashed=false",
+                    fields: 'files(id, name)',
+                    spaces: 'drive'
+                }
+            });
+            files = response.result.files;
+        } catch (gapiErr) {
+            console.error("GAPI List fallita:", gapiErr);
+            lastError = gapiErr.status || fetchErr.message;
+        }
+    }
 
-        const files = response.result.files;
-        if (files && files.length > 0) {
+    if (files !== null) {
+        if (files.length > 0) {
             fileId = files[0].id;
             await downloadData();
         } else {
-            // Create empty file
             await createConfigFile();
         }
-    } catch (err) {
-        console.error("Error finding file", err);
-        setSyncStatus('Errore List', 'error');
+    } else {
+        setSyncStatus(`Errore List (${lastError})`, 'error');
     }
 }
 
