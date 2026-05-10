@@ -397,6 +397,8 @@ function renderCategories() {
         `;
         grid.appendChild(div);
     });
+
+    populateCategorySelect();
 }
 
 function getHitsInYear(startDateStr, frequency, targetYear) {
