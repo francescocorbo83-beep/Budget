@@ -114,6 +114,11 @@ function initUI() {
     document.getElementById('filter-month').addEventListener('change', updateDashboard);
     document.getElementById('filter-year').addEventListener('change', updateDashboard);
 
+    const chartFilter = document.getElementById('chart-category-filter');
+    if (chartFilter) {
+        chartFilter.addEventListener('change', updateAnnualChart);
+    }
+
     // Modals
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -296,12 +301,31 @@ function renderTransactions() {
 function populateCategorySelect() {
     const select = document.getElementById('tx-category');
     select.innerHTML = '';
+    
+    const chartSelect = document.getElementById('chart-category-filter');
+    let currentChartFilter = 'all';
+    if (chartSelect) {
+        currentChartFilter = chartSelect.value || 'all';
+        chartSelect.innerHTML = '<option value="all">Tutte le Categorie</option>';
+    }
+
     state.categories.forEach(cat => {
         const opt = document.createElement('option');
         opt.value = cat.id;
         opt.textContent = cat.name;
         select.appendChild(opt);
+        
+        if (chartSelect) {
+            const chartOpt = document.createElement('option');
+            chartOpt.value = cat.id;
+            chartOpt.textContent = cat.name;
+            chartSelect.appendChild(chartOpt);
+        }
     });
+    
+    if (chartSelect) {
+        chartSelect.value = currentChartFilter;
+    }
 }
 
 function handleCategorySubmit(e) {
@@ -615,8 +639,14 @@ function updateAnnualChart() {
     const dataExpPrev = new Array(12).fill(0);
     const dataCashflow = new Array(12).fill(0);
 
+    let txsToAnalyze = state.transactions;
+    const catFilterElement = document.getElementById('chart-category-filter');
+    if (catFilterElement && catFilterElement.value !== 'all') {
+        txsToAnalyze = txsToAnalyze.filter(t => t.categoryId === catFilterElement.value);
+    }
+
     // Calcola i totali per ogni singolo mese
-    state.transactions.forEach(t => {
+    txsToAnalyze.forEach(t => {
         for (let m = 1; m <= 12; m++) {
             if (isTxInMonth(t, targetYear, m)) {
                 if (t.type === 'income') {
