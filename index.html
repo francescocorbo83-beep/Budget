@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexBudget</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Background Blur Elements -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+    <div class="bg-shape shape-3"></div>
+
+    <div class="app-container">
+        <!-- Sidebar / Navigation -->
+        <nav class="sidebar glass-panel">
+            <div class="brand">
+                <i class="fa-solid fa-wallet brand-icon"></i>
+                <h1>NexBudget</h1>
+            </div>
+            
+            <ul class="nav-links">
+                <li class="active" data-view="dashboard"><i class="fa-solid fa-chart-pie"></i> <span>Dashboard</span></li>
+                <li data-view="transactions"><i class="fa-solid fa-list-ul"></i> <span>Transazioni</span></li>
+                <li data-view="categories"><i class="fa-solid fa-tags"></i> <span>Categorie</span></li>
+                <li data-view="settings"><i class="fa-solid fa-gear"></i> <span>Impostazioni</span></li>
+            </ul>
+
+            <div class="auth-section">
+                <button id="btn-login" class="btn btn-primary"><i class="fa-brands fa-google"></i> Accedi con Google</button>
+                <div id="user-info" class="user-info hidden">
+                    <img id="user-avatar" src="" alt="Avatar">
+                    <span id="user-name"></span>
+                    <button id="btn-logout" class="btn-icon"><i class="fa-solid fa-right-from-bracket"></i></button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-header">
+                <button class="mobile-menu-toggle"><i class="fa-solid fa-bars"></i></button>
+                <h2 id="page-title">Dashboard</h2>
+                <div class="sync-status">
+                    <span id="sync-icon"><i class="fa-solid fa-cloud"></i></span>
+                    <span id="sync-text">Scollegato</span>
+                </div>
+            </header>
+
+            <!-- View: Dashboard -->
+            <div id="view-dashboard" class="view-section active">
+                <!-- Filters -->
+                <div class="filters-bar glass-panel">
+                    <div class="filter-group">
+                        <label>Periodo:</label>
+                        <select id="filter-period">
+                            <option value="monthly">Mensile</option>
+                            <option value="annual">Annuale</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" id="month-filter-container">
+                        <label>Mese:</label>
+                        <input type="month" id="filter-month">
+                    </div>
+                    <div class="filter-group hidden" id="year-filter-container">
+                        <label>Anno:</label>
+                        <input type="number" id="filter-year" min="2000" max="2100" value="2024">
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="summary-cards">
+                    <div class="card glass-panel card-income">
+                        <div class="card-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                        <div class="card-info">
+                            <h3>Entrate</h3>
+                            <div class="amounts">
+                                <p class="preventivo">Prev: <span id="dash-income-prev">€ 0.00</span></p>
+                                <p class="consuntivo">Cons: <span id="dash-income-cons">€ 0.00</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card glass-panel card-expense">
+                        <div class="card-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+                        <div class="card-info">
+                            <h3>Uscite</h3>
+                            <div class="amounts">
+                                <p class="preventivo">Prev: <span id="dash-expense-prev">€ 0.00</span></p>
+                                <p class="consuntivo">Cons: <span id="dash-expense-cons">€ 0.00</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card glass-panel card-balance">
+                        <div class="card-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+                        <div class="card-info">
+                            <h3>Bilancio (Consuntivo)</h3>
+                            <div class="amounts">
+                                <p class="preventivo" style="visibility:hidden">Prev: <span>€ 0.00</span></p>
+                                <p class="consuntivo"><span id="dash-balance-cons" style="font-size: 1.5rem; font-weight: bold;">€ 0.00</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Areas -->
+                <div class="charts-section glass-panel">
+                    <h3>Avanzamento Consuntivo vs Preventivo (Uscite)</h3>
+                    <div class="progress-container">
+                        <div class="progress-labels">
+                            <span>Utilizzo Budget Spese</span>
+                            <span id="progress-expense-text">0%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar fill-expense" id="progress-expense" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <h3 style="margin-top: 1.5rem;">Avanzamento Consuntivo vs Preventivo (Entrate)</h3>
+                    <div class="progress-container">
+                        <div class="progress-labels">
+                            <span>Raggiungimento Obiettivo Entrate</span>
+                            <span id="progress-income-text">0%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar fill-income" id="progress-income" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Transactions -->
+            <div id="view-transactions" class="view-section hidden">
+                <div class="section-header">
+                    <button class="btn btn-primary" id="btn-add-transaction"><i class="fa-solid fa-plus"></i> Nuova Transazione</button>
+                </div>
+                <div class="transactions-list glass-panel">
+                    <div class="table-responsive">
+                        <table id="transactions-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Titolo</th>
+                                    <th>Categoria</th>
+                                    <th>Tipo</th>
+                                    <th>Natura</th>
+                                    <th>Frequenza</th>
+                                    <th>Importo</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions-body">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Categories -->
+            <div id="view-categories" class="view-section hidden">
+                <div class="section-header">
+                    <button class="btn btn-primary" id="btn-add-category"><i class="fa-solid fa-plus"></i> Nuova Categoria</button>
+                </div>
+                <div class="categories-grid" id="categories-grid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- View: Settings -->
+            <div id="view-settings" class="view-section hidden">
+                <div class="glass-panel settings-panel">
+                    <h3>Impostazioni e Sincronizzazione</h3>
+                    <p>I dati vengono salvati su Google Drive nel file <code>budget_data.json</code> della cartella root.</p>
+                    <div class="settings-actions">
+                        <button class="btn btn-secondary" id="btn-force-sync"><i class="fa-solid fa-rotate"></i> Forza Sincronizzazione</button>
+                        <button class="btn btn-danger" id="btn-clear-data"><i class="fa-solid fa-trash"></i> Cancella Dati Locali</button>
+                    </div>
+                    <div class="cloud-setup">
+                        <h4>Guida per Configurazione Google Cloud</h4>
+                        <p>Per abilitare l'accesso a Google Drive, è necessario inserire il <b>Client ID</b> dell'applicazione e la <b>API Key</b> (se necessario) nel file `js/gdrive.js`.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Add/Edit Transaction -->
+    <div id="modal-transaction" class="modal-overlay hidden">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3 id="modal-tx-title">Nuova Transazione</h3>
+                <button class="btn-close modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="form-transaction">
+                <input type="hidden" id="tx-id">
+                <div class="form-group">
+                    <label>Titolo</label>
+                    <input type="text" id="tx-title" required placeholder="Es. Stipendio, Spesa Coop, ecc.">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select id="tx-type" required>
+                            <option value="expense">Uscita</option>
+                            <option value="income">Entrata</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Importo (€)</label>
+                        <input type="number" step="0.01" id="tx-amount" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Natura</label>
+                        <select id="tx-nature" required>
+                            <option value="preventivo">Budget (Preventivo)</option>
+                            <option value="consuntivo">Consuntivo (Reale)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Cadenza</label>
+                        <select id="tx-frequency" required>
+                            <option value="one-time">Una Tantum</option>
+                            <option value="monthly">Mensile</option>
+                            <option value="annual">Annuale</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Data di riferimento</label>
+                        <input type="date" id="tx-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Categoria</label>
+                        <select id="tx-category" required>
+                            <!-- Populated via JS -->
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary modal-close">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Category -->
+    <div id="modal-category" class="modal-overlay hidden">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3 id="modal-cat-title">Nuova Categoria</h3>
+                <button class="btn-close modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="form-category">
+                <input type="hidden" id="cat-id">
+                <div class="form-group">
+                    <label>Nome Categoria</label>
+                    <input type="text" id="cat-name" required placeholder="Es. Casa, Trasporti, ecc.">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Colore</label>
+                        <input type="color" id="cat-color" required value="#6c5ce7">
+                    </div>
+                    <div class="form-group">
+                        <label>Icona (Classe FontAwesome)</label>
+                        <input type="text" id="cat-icon" required value="fa-solid fa-tag">
+                        <small>Es. fa-solid fa-car, fa-solid fa-house</small>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary modal-close">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+    <script async defer src="https://apis.google.com/js/api.js"></script>
+    <script async defer src="https://accounts.google.com/gsi/client"></script>
+    <script src="js/gdrive.js"></script>
+</body>
+</html>

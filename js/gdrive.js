@@ -1,0 +1,230 @@
+// Google Drive API Integration
+const CLIENT_ID = 'INSERISCI_QUI_IL_TUO_CLIENT_ID.apps.googleusercontent.com';
+const API_KEY = 'INSERISCI_QUI_LA_TUA_API_KEY';
+
+const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
+
+let tokenClient;
+let gapiInited = false;
+let gisInited = false;
+let fileId = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-login').addEventListener('click', handleAuthClick);
+    document.getElementById('btn-logout').addEventListener('click', handleSignoutClick);
+    document.getElementById('btn-force-sync').addEventListener('click', forceSync);
+});
+
+// Load the Google API Client Library
+function gapiLoaded() {
+    gapi.load('client', initializeGapiClient);
+}
+
+async function initializeGapiClient() {
+    try {
+        await gapi.client.init({
+            apiKey: API_KEY,
+            discoveryDocs: DISCOVERY_DOCS,
+        });
+        gapiInited = true;
+        maybeEnableButtons();
+    } catch (err) {
+        console.error('Error initializing GAPI client', err);
+    }
+}
+
+// Load the Google Identity Services Client
+function gisLoaded() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: '', // defined later
+    });
+    gisInited = true;
+    maybeEnableButtons();
+}
+
+function maybeEnableButtons() {
+    if (gapiInited && gisInited) {
+        // Ready
+        console.log("Google APIs Ready");
+    }
+}
+
+// Ensure scripts from index.html are loaded and trigger our functions
+window.gapiLoaded = gapiLoaded;
+window.gisLoaded = gisLoaded;
+
+function handleAuthClick() {
+    if(CLIENT_ID.includes('INSERISCI_QUI')) {
+        alert("Configurazione mancante: Devi inserire il CLIENT_ID nel file js/gdrive.js");
+        return;
+    }
+    
+    tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) {
+            throw (resp);
+        }
+        updateUIForLogin(true);
+        await findOrCreateConfigFile();
+    };
+
+    if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({prompt: 'consent'});
+    } else {
+        tokenClient.requestAccessToken({prompt: ''});
+    }
+}
+
+function handleSignoutClick() {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token);
+        gapi.client.setToken('');
+        updateUIForLogin(false);
+        setSyncStatus('Scollegato', '');
+        fileId = null;
+    }
+}
+
+function updateUIForLogin(isLoggedIn) {
+    if (isLoggedIn) {
+        document.getElementById('btn-login').classList.add('hidden');
+        document.getElementById('user-info').classList.remove('hidden');
+        setSyncStatus('Connesso', 'synced');
+        // We could fetch user profile here if scope profile is added, skipping for simplicity
+        document.getElementById('user-name').textContent = "Utente Drive";
+    } else {
+        document.getElementById('btn-login').classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+    }
+}
+
+function setSyncStatus(text, className) {
+    const el = document.querySelector('.sync-status');
+    const txtEl = document.getElementById('sync-text');
+    
+    el.className = 'sync-status ' + className;
+    txtEl.textContent = text;
+}
+
+// Drive Operations
+async function findOrCreateConfigFile() {
+    setSyncStatus('Sincronizzazione...', 'syncing');
+    try {
+        const response = await gapi.client.drive.files.list({
+            q: "name='budget_data.json' and trashed=false",
+            fields: 'files(id, name)',
+            spaces: 'drive'
+        });
+
+        const files = response.result.files;
+        if (files && files.length > 0) {
+            fileId = files[0].id;
+            await downloadData();
+        } else {
+            // Create empty file
+            await createConfigFile();
+        }
+    } catch (err) {
+        console.error("Error finding file", err);
+        setSyncStatus('Errore', 'error');
+    }
+}
+
+async function createConfigFile() {
+    const metadata = {
+        name: 'budget_data.json',
+        mimeType: 'application/json'
+    };
+    
+    try {
+        // Need to use multipart/related to upload data with metadata via fetch since gapi.client.drive doesn't easily support multipart media upload
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        
+        // Use current local state or default empty
+        const localData = localStorage.getItem('nexbudget_data') || '{"categories":[],"transactions":[]}';
+        form.append('file', new Blob([localData], { type: 'application/json' }));
+        
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: new Headers({ 'Authorization': 'Bearer ' + gapi.client.getToken().access_token }),
+            body: form
+        });
+        const data = await res.json();
+        fileId = data.id;
+        setSyncStatus('Sincronizzato', 'synced');
+    } catch(e) {
+        console.error(e);
+        setSyncStatus('Errore di creazione', 'error');
+    }
+}
+
+async function downloadData() {
+    try {
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        });
+        
+        const cloudData = response.result;
+        
+        // Pass data to app state
+        if (window.updateStateFromCloud) {
+            window.updateStateFromCloud(cloudData);
+        }
+        setSyncStatus('Sincronizzato', 'synced');
+    } catch (err) {
+        console.error("Error downloading file", err);
+        setSyncStatus('Errore', 'error');
+    }
+}
+
+// Expose to app.js to trigger on save
+window.gdriveSyncData = async function(stateData) {
+    if (!fileId || !gapi.client.getToken()) return;
+    
+    setSyncStatus('Salvataggio...', 'syncing');
+    try {
+        const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
+        await fetch(url, {
+            method: 'PATCH',
+            headers: new Headers({
+                'Authorization': 'Bearer ' + gapi.client.getToken().access_token,
+                'Content-Type': 'application/json'
+            }),
+            body: JSON.stringify(stateData)
+        });
+        setSyncStatus('Sincronizzato', 'synced');
+    } catch (e) {
+        console.error(e);
+        setSyncStatus('Errore sync', 'error');
+    }
+};
+
+function forceSync() {
+    if(fileId) {
+        downloadData();
+    } else {
+        alert("Non connesso a Google Drive. Effettua prima l'accesso.");
+    }
+}
+
+// Update index.html script tags onload mapping
+window.onload = function() {
+    // This is a workaround since index.html has async defer tags without onload callback query params
+    // Let's manually trigger loading
+    if(window.gapi) {
+        gapiLoaded();
+    } else {
+        setTimeout(()=> { if(window.gapi) gapiLoaded(); }, 1000);
+    }
+    
+    if(window.google && window.google.accounts) {
+        gisLoaded();
+    } else {
+        setTimeout(()=> { if(window.google && window.google.accounts) gisLoaded(); }, 1000);
+    }
+}
