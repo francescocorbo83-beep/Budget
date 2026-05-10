@@ -160,6 +160,66 @@
                 <div class="section-header">
                     <button class="btn btn-primary" id="btn-add-transaction"><i class="fa-solid fa-plus"></i> Nuova Transazione</button>
                 </div>
+                
+                <!-- Table Filters -->
+                <div class="filters-bar glass-panel" style="gap: 1rem;">
+                    <div class="filter-group">
+                        <label for="filter-tx-date-start" style="margin-bottom: 0;">Dal:</label>
+                        <input type="date" id="filter-tx-date-start">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-tx-date-end" style="margin-bottom: 0;">Al:</label>
+                        <input type="date" id="filter-tx-date-end">
+                    </div>
+                    <div class="filter-group">
+                        <input type="text" id="filter-tx-title" placeholder="Cerca titolo...">
+                    </div>
+                    <div class="filter-group">
+                        <select id="filter-tx-category">
+                            <option value="all">Tutte le Categorie</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select id="filter-tx-type">
+                            <option value="all">Tutti i Tipi</option>
+                            <option value="income">Entrata</option>
+                            <option value="expense">Uscita</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select id="filter-tx-nature">
+                            <option value="all">Tutte le Nature</option>
+                            <option value="preventivo">Budget</option>
+                            <option value="consuntivo">Consuntivo</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select id="filter-tx-frequency">
+                            <option value="all">Frequenza (Tutte)</option>
+                            <option value="one-time">Una Tantum</option>
+                            <option value="monthly">Mensile</option>
+                            <option value="bimonthly">Bimestrale</option>
+                            <option value="quarterly">Trimestrale</option>
+                            <option value="semiannual">Semestrale</option>
+                            <option value="annual">Annuale</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select id="filter-tx-amount-op">
+                            <option value="all">Qualsiasi Importo</option>
+                            <option value="gt">Maggiore di &gt;</option>
+                            <option value="lt">Minore di &lt;</option>
+                            <option value="eq">Uguale a =</option>
+                            <option value="between">Compreso tra</option>
+                        </select>
+                        <input type="number" id="filter-tx-amount-1" placeholder="€" style="display: none; width: 100px;">
+                        <span id="filter-tx-amount-and" style="display: none; color: var(--text-secondary);">e</span>
+                        <input type="number" id="filter-tx-amount-2" placeholder="€" style="display: none; width: 100px;">
+                    </div>
+                    <div class="filter-group" style="margin-left: auto;">
+                        <button class="btn btn-secondary" id="btn-reset-filters"><i class="fa-solid fa-eraser"></i> Reset Filtri</button>
+                    </div>
+                </div>
                 <div class="transactions-list glass-panel">
                     <div class="table-responsive">
                         <table id="transactions-table">
