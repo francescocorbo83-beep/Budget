@@ -164,18 +164,22 @@ async function createConfigFile() {
 
 async function downloadData() {
     try {
-        const response = await gapi.client.drive.files.get({
-            fileId: fileId,
-            alt: 'media'
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+        const res = await fetch(url, {
+            headers: new Headers({ 'Authorization': 'Bearer ' + gapi.client.getToken().access_token })
         });
         
-        let cloudData = response.result;
-        if (typeof response.body === 'string') {
-            try { cloudData = JSON.parse(response.body); } catch(e){}
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
         }
         
-        // Pass data to app state
-        if (window.updateStateFromCloud) {
+        const textData = await res.text();
+        let cloudData = null;
+        try {
+            cloudData = JSON.parse(textData || '{}');
+        } catch(e) {}
+        
+        if (window.updateStateFromCloud && cloudData) {
             window.updateStateFromCloud(cloudData);
         }
         setSyncStatus('Sincronizzato', 'synced');

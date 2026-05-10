@@ -50,11 +50,26 @@ window.updateStateFromCloud = function(cloudState) {
         }
     }
     if (cloudState && cloudState.categories) {
+        // Merge offline data into cloudData to prevent data loss
+        const cloudTxIds = new Set(cloudState.transactions.map(t => t.id));
+        const localOnlyTxs = state.transactions.filter(t => !cloudTxIds.has(t.id));
+        
+        const cloudCatIds = new Set(cloudState.categories.map(c => c.id));
+        const localOnlyCats = state.categories.filter(c => !cloudCatIds.has(c.id));
+        
+        cloudState.transactions = [...cloudState.transactions, ...localOnlyTxs];
+        cloudState.categories = [...cloudState.categories, ...localOnlyCats];
+        
         state = cloudState;
         localStorage.setItem('nexbudget_data', JSON.stringify(state));
         updateDashboard();
         renderTransactions();
         renderCategories();
+        
+        // Push merged data back to cloud if there was local-only data
+        if ((localOnlyTxs.length > 0 || localOnlyCats.length > 0) && window.gdriveSyncData) {
+            window.gdriveSyncData(state);
+        }
     }
 }
 
