@@ -552,6 +552,7 @@ function getMonthlyImpact(tx, targetYear, targetMonth) {
     const txMonth = txDate.getMonth() + 1;
     const txAmount = parseFloat(tx.amount) || 0;
 
+    // Se è "Una Tantum", la logica è identica per preventivo e consuntivo
     if (tx.frequency === 'one-time') {
         if (txYear === targetYear && txMonth === targetMonth) {
             return txAmount;
@@ -559,22 +560,40 @@ function getMonthlyImpact(tx, targetYear, targetMonth) {
         return 0;
     }
 
-    let p = 1;
-    if (tx.frequency === 'monthly') p = 1;
-    else if (tx.frequency === 'bimonthly') p = 2;
-    else if (tx.frequency === 'quarterly') p = 3;
-    else if (tx.frequency === 'semiannual') p = 6;
-    else if (tx.frequency === 'annual') p = 12;
+    if (tx.nature === 'consuntivo') {
+        // Logica a CASSA (Cash Basis)
+        if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
+            return 0; // Transazione futura
+        }
+        const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
+        let isHit = false;
+        
+        if (tx.frequency === 'monthly') isHit = true;
+        else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
+        else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
+        else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
+        else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
+        
+        return isHit ? txAmount : 0;
+    } else {
+        // Logica ad ACCANTONAMENTO (Accrual Basis) per il Preventivo
+        let p = 1;
+        if (tx.frequency === 'monthly') p = 1;
+        else if (tx.frequency === 'bimonthly') p = 2;
+        else if (tx.frequency === 'quarterly') p = 3;
+        else if (tx.frequency === 'semiannual') p = 6;
+        else if (tx.frequency === 'annual') p = 12;
 
-    const absoluteTxMonth = txYear * 12 + txMonth;
-    const absoluteStartMonth = absoluteTxMonth - (p - 1);
-    const absoluteTargetMonth = targetYear * 12 + targetMonth;
+        const absoluteTxMonth = txYear * 12 + txMonth;
+        const absoluteStartMonth = absoluteTxMonth - (p - 1);
+        const absoluteTargetMonth = targetYear * 12 + targetMonth;
 
-    if (absoluteTargetMonth >= absoluteStartMonth) {
-        return txAmount / p;
+        if (absoluteTargetMonth >= absoluteStartMonth) {
+            return txAmount / p;
+        }
+
+        return 0;
     }
-
-    return 0;
 }
 
 // Dashboard Calculation
