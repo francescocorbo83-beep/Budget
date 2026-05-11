@@ -546,59 +546,35 @@ function renderCategories() {
     populateCategorySelect();
 }
 
-function getHitsInYear(startDateStr, frequency, targetYear) {
-    const startDate = new Date(startDateStr);
-    const startYear = startDate.getFullYear();
-    const startMonth = startDate.getMonth() + 1; // 1-12
-    
-    if (startYear > targetYear) return 0;
-    
-    if (frequency === 'one-time') {
-        return startYear === targetYear ? 1 : 0;
-    }
-    
-    let stepMonths = 1;
-    if (frequency === 'bimonthly') stepMonths = 2;
-    if (frequency === 'quarterly') stepMonths = 3;
-    if (frequency === 'semiannual') stepMonths = 6;
-    if (frequency === 'annual') stepMonths = 12;
-
-    let currentYear = startYear;
-    let currentMonth = startMonth;
-    let hits = 0;
-    
-    while (currentYear <= targetYear) {
-        if (currentYear === targetYear) {
-            hits++;
-        }
-        currentMonth += stepMonths;
-        if (currentMonth > 12) {
-            currentYear += Math.floor((currentMonth - 1) / 12);
-            currentMonth = ((currentMonth - 1) % 12) + 1;
-        }
-    }
-    return hits;
-}
-
-function isTxInMonth(tx, targetYear, targetMonth) {
+function getMonthlyImpact(tx, targetYear, targetMonth) {
     const txDate = new Date(tx.date);
     const txYear = txDate.getFullYear();
     const txMonth = txDate.getMonth() + 1;
-    
-    // Non considerare transazioni future
-    if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
-        return false;
+    const txAmount = parseFloat(tx.amount) || 0;
+
+    if (tx.frequency === 'one-time') {
+        if (txYear === targetYear && txMonth === targetMonth) {
+            return txAmount;
+        }
+        return 0;
     }
 
-    const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
+    let p = 1;
+    if (tx.frequency === 'monthly') p = 1;
+    else if (tx.frequency === 'bimonthly') p = 2;
+    else if (tx.frequency === 'quarterly') p = 3;
+    else if (tx.frequency === 'semiannual') p = 6;
+    else if (tx.frequency === 'annual') p = 12;
 
-    if (tx.frequency === 'one-time') return monthDiff === 0;
-    if (tx.frequency === 'monthly') return true;
-    if (tx.frequency === 'bimonthly') return monthDiff % 2 === 0;
-    if (tx.frequency === 'quarterly') return monthDiff % 3 === 0;
-    if (tx.frequency === 'semiannual') return monthDiff % 6 === 0;
-    if (tx.frequency === 'annual') return monthDiff % 12 === 0;
-    return false;
+    const absoluteTxMonth = txYear * 12 + txMonth;
+    const absoluteStartMonth = absoluteTxMonth - (p - 1);
+    const absoluteTargetMonth = targetYear * 12 + targetMonth;
+
+    if (absoluteTargetMonth >= absoluteStartMonth) {
+        return txAmount / p;
+    }
+
+    return 0;
 }
 
 // Dashboard Calculation
@@ -609,19 +585,26 @@ function updateDashboard() {
 
     let txs = state.transactions;
 
-    // Filter by date
-    if (period === 'monthly' && filterMonth) {
-        const [targetYear, targetMonth] = filterMonth.split('-').map(Number);
-        txs = txs.filter(t => isTxInMonth(t, targetYear, targetMonth));
-    } else if (period === 'annual' && filterYear) {
-        const targetYear = parseInt(filterYear);
-        txs = txs.filter(t => {
-            const txYear = new Date(t.date).getFullYear();
-            if (txYear > targetYear) return false;
-            if (t.frequency === 'one-time') return txYear === targetYear;
-            return true; // Le periodiche iniziate quest'anno o prima le includiamo
-        });
-    }
+    // Filter and calculate impacts
+    const filteredTxs = [];
+    
+    state.transactions.forEach(t => {
+        let amount = 0;
+        
+        if (period === 'annual' && filterYear) {
+            const targetYear = parseInt(filterYear);
+            for (let m = 1; m <= 12; m++) {
+                amount += getMonthlyImpact(t, targetYear, m);
+            }
+        } else if (period === 'monthly' && filterMonth) {
+            const [targetYear, targetMonth] = filterMonth.split('-').map(Number);
+            amount = getMonthlyImpact(t, targetYear, targetMonth);
+        }
+
+        if (amount > 0) {
+            filteredTxs.push({ ...t, calculatedAmount: amount });
+        }
+    });
 
     let incomePrev = 0, incomeCons = 0;
     let expensePrev = 0, expenseCons = 0;
@@ -629,15 +612,9 @@ function updateDashboard() {
     // Oggetto per memorizzare i totali raggruppati per categoria
     const catTotals = {};
 
-    txs.forEach(t => {
-        let amount = t.amount;
-        
-        // Moltiplichiamo l'importo per il numero di occorrenze nell'anno se la vista è annuale
-        if (period === 'annual') {
-            const targetYear = parseInt(filterYear);
-            const hits = getHitsInYear(t.date, t.frequency, targetYear);
-            amount = amount * hits;
-        }
+    filteredTxs.forEach(t => {
+        let amount = t.calculatedAmount;
+
 
         // Inizializza l'oggetto categoria se non esiste
         if (!catTotals[t.categoryId]) {
@@ -795,13 +772,14 @@ function updateAnnualChart() {
     // Calcola i totali per ogni singolo mese
     txsToAnalyze.forEach(t => {
         for (let m = 1; m <= 12; m++) {
-            if (isTxInMonth(t, targetYear, m)) {
+            const impact = getMonthlyImpact(t, targetYear, m);
+            if (impact > 0) {
                 if (t.type === 'income') {
-                    if (t.nature === 'consuntivo') dataIncCons[m-1] += t.amount;
-                    else dataIncPrev[m-1] += t.amount;
+                    if (t.nature === 'consuntivo') dataIncCons[m-1] += impact;
+                    else dataIncPrev[m-1] += impact;
                 } else {
-                    if (t.nature === 'consuntivo') dataExpCons[m-1] += t.amount;
-                    else dataExpPrev[m-1] += t.amount;
+                    if (t.nature === 'consuntivo') dataExpCons[m-1] += impact;
+                    else dataExpPrev[m-1] += impact;
                 }
             }
         }
@@ -977,8 +955,9 @@ function exportYearlyDataToCSV() {
         const natureStr = t.nature === 'preventivo' ? 'Budget' : 'Consuntivo';
         
         for (let m = 1; m <= 12; m++) {
-            if (isTxInMonth(t, targetYear, m)) {
-                const amountSign = t.type === 'income' ? t.amount : -t.amount;
+            const impact = getMonthlyImpact(t, targetYear, m);
+            if (impact > 0) {
+                const amountSign = t.type === 'income' ? impact : -impact;
                 // Formatta importo con la virgola per i decimali, standard europeo
                 const amountFormatted = amountSign.toFixed(2).replace('.', ',');
                 
