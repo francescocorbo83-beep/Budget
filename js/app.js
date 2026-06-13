@@ -139,6 +139,22 @@ function initUI() {
 
     document.getElementById('form-transaction').addEventListener('submit', handleTransactionSubmit);
 
+    // Budget Transfer Modals
+    const btnAddTransfer = document.getElementById('btn-add-transfer');
+    if (btnAddTransfer) {
+        btnAddTransfer.addEventListener('click', () => {
+            document.getElementById('form-transfer').reset();
+            populateCategorySelect();
+            document.getElementById('transfer-date').valueAsDate = new Date();
+            document.getElementById('modal-transfer').classList.remove('hidden');
+        });
+    }
+
+    const formTransfer = document.getElementById('form-transfer');
+    if (formTransfer) {
+        formTransfer.addEventListener('submit', handleTransferSubmit);
+    }
+
     // Transactions Table Filters
     const txFilters = ['filter-tx-date-start', 'filter-tx-date-end', 'filter-tx-category', 'filter-tx-type', 'filter-tx-nature', 'filter-tx-frequency'];
     txFilters.forEach(id => {
@@ -318,9 +334,80 @@ function handleTransactionSubmit(e) {
     updateDashboard();
 }
 
+function handleTransferSubmit(e) {
+    e.preventDefault();
+    
+    const srcCatId = document.getElementById('transfer-category-src').value;
+    const dstCatId = document.getElementById('transfer-category-dst').value;
+    const amount = parseFloat(document.getElementById('transfer-amount').value) || 0;
+    const date = document.getElementById('transfer-date').value;
+    const type = document.getElementById('transfer-type').value;
+
+    if (srcCatId === dstCatId) {
+        alert('La categoria di provenienza e quella di destinazione non possono essere identiche.');
+        return;
+    }
+
+    if (amount <= 0) {
+        alert('L\'importo dello spostamento deve essere maggiore di zero.');
+        return;
+    }
+
+    const srcCat = state.categories.find(c => c.id === srcCatId);
+    const dstCat = state.categories.find(c => c.id === dstCatId);
+    
+    const transferId = `transfer-${Date.now()}`;
+    const timestamp = Date.now();
+
+    // 1. Transazione di Provenienza (importo negativo)
+    const txSrc = {
+        id: `tx-src-${timestamp}`,
+        title: `Spostamento budget per ${dstCat ? dstCat.name : 'N/D'}`,
+        type: type,
+        amount: -amount,
+        nature: 'preventivo',
+        frequency: 'one-time',
+        date: date,
+        categoryId: srcCatId,
+        transferId: transferId
+    };
+
+    // 2. Transazione di Destinazione (importo positivo)
+    const txDst = {
+        id: `tx-dst-${timestamp}`,
+        title: `Spostamento budget da ${srcCat ? srcCat.name : 'N/D'}`,
+        type: type,
+        amount: amount,
+        nature: 'preventivo',
+        frequency: 'one-time',
+        date: date,
+        categoryId: dstCatId,
+        transferId: transferId
+    };
+
+    state.transactions.push(txSrc);
+    state.transactions.push(txDst);
+
+    saveLocalData();
+    document.getElementById('modal-transfer').classList.add('hidden');
+    renderTransactions();
+    updateDashboard();
+}
+
 function deleteTransaction(id) {
-    if (confirm('Eliminare questa transazione?')) {
-        state.transactions = state.transactions.filter(t => t.id !== id);
+    const tx = state.transactions.find(t => t.id === id);
+    if (!tx) return;
+
+    let confirmMsg = 'Eliminare questa transazione?';
+    let deleteFilter = t => t.id !== id;
+
+    if (tx.transferId) {
+        confirmMsg = 'Questa transazione fa parte di uno spostamento di budget. Vuoi eliminare l\'intero spostamento?';
+        deleteFilter = t => t.transferId !== tx.transferId;
+    }
+
+    if (confirm(confirmMsg)) {
+        state.transactions = state.transactions.filter(deleteFilter);
         saveLocalData();
         renderTransactions();
         updateDashboard();
@@ -448,6 +535,13 @@ function populateCategorySelect() {
         tableSelect.innerHTML = '<option value="all">Tutte le Categorie</option>';
     }
 
+    const transferSrcSelect = document.getElementById('transfer-category-src');
+    const transferDstSelect = document.getElementById('transfer-category-dst');
+    if (transferSrcSelect && transferDstSelect) {
+        transferSrcSelect.innerHTML = '';
+        transferDstSelect.innerHTML = '';
+    }
+
     state.categories.forEach(cat => {
         const opt = document.createElement('option');
         opt.value = cat.id;
@@ -466,6 +560,18 @@ function populateCategorySelect() {
             tableOpt.value = cat.id;
             tableOpt.textContent = cat.name;
             tableSelect.appendChild(tableOpt);
+        }
+
+        if (transferSrcSelect && transferDstSelect) {
+            const srcOpt = document.createElement('option');
+            srcOpt.value = cat.id;
+            srcOpt.textContent = cat.name;
+            transferSrcSelect.appendChild(srcOpt);
+
+            const dstOpt = document.createElement('option');
+            dstOpt.value = cat.id;
+            dstOpt.textContent = cat.name;
+            transferDstSelect.appendChild(dstOpt);
         }
     });
     
