@@ -504,8 +504,13 @@ function renderTransactions() {
                     'Annuale'
                 }
             </td>
-            <td style="font-weight: bold; color: ${tx.type === 'income' ? 'var(--success)' : 'var(--danger)'}">
-                ${tx.type === 'income' ? '+' : '-'}€${tx.amount.toFixed(2)}
+            <td>
+                ${(() => {
+                    const isPositiveEffect = tx.type === 'income' ? tx.amount >= 0 : tx.amount < 0;
+                    const color = isPositiveEffect ? 'var(--success)' : 'var(--danger)';
+                    const sign = isPositiveEffect ? '+' : '-';
+                    return `<span style="font-weight: bold; color: ${color}">${sign}€${Math.abs(tx.amount).toFixed(2)}</span>`;
+                })()}
             </td>
             <td>
                 <button class="btn-icon" onclick="editTransaction('${tx.id}')"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -746,10 +751,9 @@ function updateDashboard() {
         let prevCashAmount = 0;
         let consAmount = 0;
         let foreAmount = 0;
-        
         targetMonths.forEach(ym => {
             const impact = getMonthlyImpact(t, ym.year, ym.month);
-            if (impact <= 0) return;
+            if (impact === 0) return;
             
             // 1. Budget (Preventivo)
             if (t.nature === 'preventivo') {
@@ -793,7 +797,7 @@ function updateDashboard() {
             }
         });
         
-        if (prevAmount > 0 || consAmount > 0 || foreAmount > 0) {
+        if (prevAmount !== 0 || consAmount !== 0 || foreAmount !== 0) {
             if (t.type === 'income') {
                 incomePrev += prevAmount;
                 incomeCons += consAmount;
@@ -983,7 +987,7 @@ function updateAnnualChart() {
     txsToAnalyze.forEach(t => {
         for (let m = 1; m <= 12; m++) {
             const impact = getMonthlyImpact(t, targetYear, m);
-            if (impact > 0) {
+            if (impact !== 0) {
                 if (t.type === 'income') {
                     if (t.nature === 'consuntivo') dataIncCons[m-1] += impact;
                     else dataIncPrev[m-1] += impact;
@@ -1010,7 +1014,7 @@ function updateAnnualChart() {
         
         txsToAnalyze.forEach(t => {
             const impact = getMonthlyImpact(t, yr, m);
-            if (impact <= 0) return;
+            if (impact === 0) return;
             
             let include = false;
             if (yr < todayYear || (yr === todayYear && m < todayMonth)) {
