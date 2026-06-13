@@ -732,8 +732,8 @@ function updateDashboard() {
         targetMonths.push({ year: targetYear, month: targetMonth });
     }
 
-    let incomePrev = 0, incomeCons = 0, incomeFore = 0;
-    let expensePrev = 0, expenseCons = 0, expenseFore = 0;
+    let incomePrev = 0, incomePrevCash = 0, incomeCons = 0, incomeFore = 0;
+    let expensePrev = 0, expensePrevCash = 0, expenseCons = 0, expenseFore = 0;
     
     // Oggetto per memorizzare i totali raggruppati per categoria
     const catTotals = {};
@@ -800,10 +800,12 @@ function updateDashboard() {
         if (prevAmount !== 0 || consAmount !== 0 || foreAmount !== 0) {
             if (t.type === 'income') {
                 incomePrev += prevAmount;
+                incomePrevCash += prevCashAmount;
                 incomeCons += consAmount;
                 incomeFore += foreAmount;
             } else {
                 expensePrev += prevAmount;
+                expensePrevCash += prevCashAmount;
                 expenseCons += consAmount;
                 expenseFore += foreAmount;
             }
@@ -924,16 +926,19 @@ function updateDashboard() {
     // Progress Bars - Allow percentages over 100%
     const expenseTruePercent = expensePrev > 0 ? (expenseCons / expensePrev) * 100 : 0;
     const incomeTruePercent = incomePrev > 0 ? (incomeCons / incomePrev) * 100 : 0;
+    const expenseCashTruePercent = expensePrevCash > 0 ? (expenseCons / expensePrevCash) * 100 : 0;
+    const incomeCashTruePercent = incomePrevCash > 0 ? (incomeCons / incomePrevCash) * 100 : 0;
 
     // Cap visual width at 100% to prevent CSS overflow
     const expenseWidth = Math.min(expenseTruePercent, 100);
     const incomeWidth = Math.min(incomeTruePercent, 100);
+    const expenseCashWidth = Math.min(expenseCashTruePercent, 100);
+    const incomeCashWidth = Math.min(incomeCashTruePercent, 100);
 
+    // Update Competenza elements (Expense)
     document.getElementById('progress-expense').style.width = `${expenseWidth}%`;
     const expText = document.getElementById('progress-expense-text');
     expText.textContent = `${expenseTruePercent.toFixed(1)}%`;
-    
-    // Alert visivo per sforamento budget (rosso per uscite, verde per entrate extra)
     if (expenseTruePercent > 100) {
         expText.style.color = 'var(--danger)';
         expText.style.fontWeight = 'bold';
@@ -942,16 +947,40 @@ function updateDashboard() {
         expText.style.fontWeight = '';
     }
 
+    // Update Cassa elements (Expense)
+    document.getElementById('progress-expense-cash').style.width = `${expenseCashWidth}%`;
+    const expCashText = document.getElementById('progress-expense-cash-text');
+    expCashText.textContent = expensePrevCash > 0 ? `${expenseCashTruePercent.toFixed(1)}%` : '-';
+    if (expensePrevCash > 0 && expenseCashTruePercent > 100) {
+        expCashText.style.color = 'var(--danger)';
+        expCashText.style.fontWeight = 'bold';
+    } else {
+        expCashText.style.color = '';
+        expCashText.style.fontWeight = '';
+    }
+
+    // Update Competenza elements (Income)
     document.getElementById('progress-income').style.width = `${incomeWidth}%`;
     const incText = document.getElementById('progress-income-text');
     incText.textContent = `${incomeTruePercent.toFixed(1)}%`;
-    
     if (incomeTruePercent > 100) {
         incText.style.color = 'var(--success)';
         incText.style.fontWeight = 'bold';
     } else {
         incText.style.color = '';
         incText.style.fontWeight = '';
+    }
+
+    // Update Cassa elements (Income)
+    document.getElementById('progress-income-cash').style.width = `${incomeCashWidth}%`;
+    const incCashText = document.getElementById('progress-income-cash-text');
+    incCashText.textContent = incomePrevCash > 0 ? `${incomeCashTruePercent.toFixed(1)}%` : '-';
+    if (incomePrevCash > 0 && incomeCashTruePercent > 100) {
+        incCashText.style.color = 'var(--success)';
+        incCashText.style.fontWeight = 'bold';
+    } else {
+        incCashText.style.color = '';
+        incCashText.style.fontWeight = '';
     }
 
     updateAnnualChart();
