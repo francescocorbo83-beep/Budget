@@ -637,6 +637,7 @@ function updateDashboard() {
 
     state.transactions.forEach(t => {
         let prevAmount = 0;
+        let prevCashAmount = 0;
         let consAmount = 0;
         let foreAmount = 0;
         
@@ -647,6 +648,9 @@ function updateDashboard() {
             // 1. Budget (Preventivo)
             if (t.nature === 'preventivo') {
                 prevAmount += impact;
+                // Calcoliamo il budget finanziario a cassa (cassa per il preventivo)
+                const cashImpact = getMonthlyImpact({ ...t, nature: 'consuntivo' }, ym.year, ym.month);
+                prevCashAmount += cashImpact;
             }
             
             // 2. Consuntivo (Reale)
@@ -697,12 +701,14 @@ function updateDashboard() {
             if (!catTotals[t.categoryId]) {
                 catTotals[t.categoryId] = {
                     prev: 0,
+                    prevCash: 0,
                     cons: 0,
                     fore: 0,
                     type: t.type
                 };
             }
             catTotals[t.categoryId].prev += prevAmount;
+            catTotals[t.categoryId].prevCash += prevCashAmount;
             catTotals[t.categoryId].cons += consAmount;
             catTotals[t.categoryId].fore += foreAmount;
         }
@@ -719,14 +725,23 @@ function updateDashboard() {
         if (!cat) return;
         
         const totals = catTotals[catId];
-        if (totals.prev === 0 && totals.cons === 0) return;
+        if (totals.prev === 0 && totals.prevCash === 0 && totals.cons === 0) return;
 
-        const percent = totals.prev > 0 ? (totals.cons / totals.prev) * 100 : 0;
-        const width = Math.min(percent, 100);
-        
-        let textStyle = '';
-        if (percent > 100) {
-            textStyle = totals.type === 'expense' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
+        // Calcoli Competenza
+        const percentPrev = totals.prev > 0 ? (totals.cons / totals.prev) * 100 : 0;
+        const widthPrev = Math.min(percentPrev, 100);
+        let textStylePrev = '';
+        if (percentPrev > 100) {
+            textStylePrev = totals.type === 'expense' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
+        }
+
+        // Calcoli Cassa (Finanziario)
+        const percentCash = totals.prevCash > 0 ? (totals.cons / totals.prevCash) * 100 : 0;
+        const widthCash = Math.min(percentCash, 100);
+        const percentCashStr = totals.prevCash > 0 ? `${percentCash.toFixed(1)}%` : '-';
+        let textStyleCash = '';
+        if (totals.prevCash > 0 && percentCash > 100) {
+            textStyleCash = totals.type === 'expense' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
         }
 
         const html = `
@@ -735,12 +750,24 @@ function updateDashboard() {
                     <div class="cat-progress-name">
                         <i class="${cat.icon}" style="color: ${cat.color}"></i> ${cat.name}
                     </div>
-                    <div class="cat-progress-amounts" style="${textStyle}">
-                        €${totals.cons.toFixed(2)} / €${totals.prev.toFixed(2)} (${percent.toFixed(1)}%)
-                    </div>
+                </div>
+                
+                <!-- Competenza (Spalmato) -->
+                <div class="cat-progress-sub-header">
+                    <span>Competenza:</span>
+                    <span style="${textStylePrev}">€${totals.cons.toFixed(2)} / €${totals.prev.toFixed(2)} (${percentPrev.toFixed(1)}%)</span>
                 </div>
                 <div class="cat-progress-bar-bg">
-                    <div class="cat-progress-bar" style="width: ${width}%; background-color: ${cat.color}"></div>
+                    <div class="cat-progress-bar" style="width: ${widthPrev}%; background-color: ${cat.color}"></div>
+                </div>
+                
+                <!-- Cassa (Finanziario) -->
+                <div class="cat-progress-sub-header">
+                    <span>Cassa (Finanz.):</span>
+                    <span style="${textStyleCash}">€${totals.cons.toFixed(2)} / €${totals.prevCash.toFixed(2)} (${percentCashStr})</span>
+                </div>
+                <div class="cat-progress-bar-bg">
+                    <div class="cat-progress-bar" style="width: ${widthCash}%; background-color: var(--text-secondary); opacity: 0.6;"></div>
                 </div>
             </div>
         `;
