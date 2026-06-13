@@ -596,6 +596,14 @@ function getMonthlyImpact(tx, targetYear, targetMonth) {
     }
 }
 
+function getTxOccurrenceDate(tx, targetYear, targetMonth) {
+    const txDateObj = new Date(tx.date);
+    const day = txDateObj.getDate();
+    const tempDate = new Date(targetYear, targetMonth, 0);
+    const targetDay = Math.min(day, tempDate.getDate());
+    return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+}
+
 // Dashboard Calculation
 function updateDashboard() {
     const period = document.getElementById('filter-period').value;
@@ -662,8 +670,11 @@ function updateDashboard() {
                 // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
                 if (t.nature === 'consuntivo' && t.date <= todayStr) {
                     includeInFore = true;
-                } else if (t.nature === 'preventivo' && t.date > todayStr) {
-                    includeInFore = true;
+                } else if (t.nature === 'preventivo') {
+                    const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
+                    if (occurrenceDateStr > todayStr) {
+                        includeInFore = true;
+                    }
                 }
             }
             
@@ -883,8 +894,11 @@ function updateAnnualChart() {
                 // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
                 if (t.nature === 'consuntivo' && t.date <= todayStr) {
                     include = true;
-                } else if (t.nature === 'preventivo' && t.date > todayStr) {
-                    include = true;
+                } else if (t.nature === 'preventivo') {
+                    const occurrenceDateStr = getTxOccurrenceDate(t, yr, m);
+                    if (occurrenceDateStr > todayStr) {
+                        include = true;
+                    }
                 }
             }
             
