@@ -116,27 +116,50 @@
                 <div class="charts-section glass-panel">
                     <h3>Avanzamento Consuntivo vs Preventivo (Uscite)</h3>
                     <div class="progress-container">
+                        <!-- Competenza -->
                         <div class="progress-labels">
-                            <span>Utilizzo Budget Spese</span>
+                            <span>Utilizzo Budget Spese (Competenza)</span>
                             <span id="progress-expense-text">0%</span>
                         </div>
-                        <div class="progress-bar-bg">
+                        <div class="progress-bar-bg" style="margin-bottom: 0.75rem;">
                             <div class="progress-bar fill-expense" id="progress-expense" style="width: 0%"></div>
                         </div>
+                        
+                        <!-- Cassa -->
+                        <div class="progress-labels">
+                            <span>Utilizzo Budget Spese (Cassa)</span>
+                            <span id="progress-expense-cash-text">0%</span>
+                        </div>
+                        <div class="progress-bar-bg" style="margin-bottom: 1rem;">
+                            <div class="progress-bar" id="progress-expense-cash" style="width: 0%; background-color: var(--text-secondary); opacity: 0.6;"></div>
+                        </div>
+
                         <button class="btn-toggle-details" id="btn-toggle-expense" style="margin-top: 0.5rem;">
                             <i class="fa-solid fa-chevron-down"></i> Dettaglio Categorie
                         </button>
                         <div id="details-expense" class="category-details hidden"></div>
                     </div>
+                    
                     <h3 style="margin-top: 1.5rem;">Avanzamento Consuntivo vs Preventivo (Entrate)</h3>
                     <div class="progress-container">
+                        <!-- Competenza -->
                         <div class="progress-labels">
-                            <span>Raggiungimento Obiettivo Entrate</span>
+                            <span>Raggiungimento Obiettivo Entrate (Competenza)</span>
                             <span id="progress-income-text">0%</span>
                         </div>
-                        <div class="progress-bar-bg">
+                        <div class="progress-bar-bg" style="margin-bottom: 0.75rem;">
                             <div class="progress-bar fill-income" id="progress-income" style="width: 0%"></div>
                         </div>
+                        
+                        <!-- Cassa -->
+                        <div class="progress-labels">
+                            <span>Raggiungimento Obiettivo Entrate (Cassa)</span>
+                            <span id="progress-income-cash-text">0%</span>
+                        </div>
+                        <div class="progress-bar-bg" style="margin-bottom: 1rem;">
+                            <div class="progress-bar" id="progress-income-cash" style="width: 0%; background-color: var(--text-secondary); opacity: 0.6;"></div>
+                        </div>
+
                         <button class="btn-toggle-details" id="btn-toggle-income" style="margin-top: 0.5rem;">
                             <i class="fa-solid fa-chevron-down"></i> Dettaglio Categorie
                         </button>
