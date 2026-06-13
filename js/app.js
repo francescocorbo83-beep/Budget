@@ -602,64 +602,98 @@ function updateDashboard() {
     const filterMonth = document.getElementById('filter-month').value; // YYYY-MM
     const filterYear = document.getElementById('filter-year').value; // YYYY
 
-    let txs = state.transactions;
-
-    // Filter and calculate impacts
-    const filteredTxs = [];
-    
-    state.transactions.forEach(t => {
-        let amount = 0;
-        
-        if (period === 'annual' && filterYear) {
-            const targetYear = parseInt(filterYear);
-            for (let m = 1; m <= 12; m++) {
-                amount += getMonthlyImpact(t, targetYear, m);
-            }
-        } else if (period === 'monthly' && filterMonth) {
-            const [targetYear, targetMonth] = filterMonth.split('-').map(Number);
-            amount = getMonthlyImpact(t, targetYear, targetMonth);
+    let targetMonths = [];
+    if (period === 'annual' && filterYear) {
+        const targetYear = parseInt(filterYear);
+        for (let m = 1; m <= 12; m++) {
+            targetMonths.push({ year: targetYear, month: m });
         }
+    } else if (period === 'monthly' && filterMonth) {
+        const [targetYear, targetMonth] = filterMonth.split('-').map(Number);
+        targetMonths.push({ year: targetYear, month: targetMonth });
+    }
 
-        if (amount > 0) {
-            filteredTxs.push({ ...t, calculatedAmount: amount });
-        }
-    });
-
-    let incomePrev = 0, incomeCons = 0;
-    let expensePrev = 0, expenseCons = 0;
+    let incomePrev = 0, incomeCons = 0, incomeFore = 0;
+    let expensePrev = 0, expenseCons = 0, expenseFore = 0;
     
     // Oggetto per memorizzare i totali raggruppati per categoria
     const catTotals = {};
 
-    filteredTxs.forEach(t => {
-        let amount = t.calculatedAmount;
+    const today = new Date();
+    const todayYear = today.getFullYear();
+    const todayMonth = today.getMonth() + 1;
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
 
-
-        // Inizializza l'oggetto categoria se non esiste
-        if (!catTotals[t.categoryId]) {
-            catTotals[t.categoryId] = {
-                prev: 0,
-                cons: 0,
-                type: t.type
-            };
-        }
-
-        if (t.type === 'income') {
+    state.transactions.forEach(t => {
+        let prevAmount = 0;
+        let consAmount = 0;
+        let foreAmount = 0;
+        
+        targetMonths.forEach(ym => {
+            const impact = getMonthlyImpact(t, ym.year, ym.month);
+            if (impact <= 0) return;
+            
+            // 1. Budget (Preventivo)
             if (t.nature === 'preventivo') {
-                incomePrev += amount;
-                catTotals[t.categoryId].prev += amount;
-            } else {
-                incomeCons += amount;
-                catTotals[t.categoryId].cons += amount;
+                prevAmount += impact;
             }
-        } else {
-            if (t.nature === 'preventivo') {
-                expensePrev += amount;
-                catTotals[t.categoryId].prev += amount;
-            } else {
-                expenseCons += amount;
-                catTotals[t.categoryId].cons += amount;
+            
+            // 2. Consuntivo (Reale)
+            if (t.nature === 'consuntivo') {
+                consAmount += impact;
             }
+            
+            // 3. Forecast
+            let includeInFore = false;
+            if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
+                // Mese passato: solo consuntivo
+                if (t.nature === 'consuntivo') {
+                    includeInFore = true;
+                }
+            } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
+                // Mese futuro: solo preventivo
+                if (t.nature === 'preventivo') {
+                    includeInFore = true;
+                }
+            } else {
+                // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
+                if (t.nature === 'consuntivo' && t.date <= todayStr) {
+                    includeInFore = true;
+                } else if (t.nature === 'preventivo' && t.date > todayStr) {
+                    includeInFore = true;
+                }
+            }
+            
+            if (includeInFore) {
+                foreAmount += impact;
+            }
+        });
+        
+        if (prevAmount > 0 || consAmount > 0 || foreAmount > 0) {
+            if (t.type === 'income') {
+                incomePrev += prevAmount;
+                incomeCons += consAmount;
+                incomeFore += foreAmount;
+            } else {
+                expensePrev += prevAmount;
+                expenseCons += consAmount;
+                expenseFore += foreAmount;
+            }
+            
+            if (!catTotals[t.categoryId]) {
+                catTotals[t.categoryId] = {
+                    prev: 0,
+                    cons: 0,
+                    fore: 0,
+                    type: t.type
+                };
+            }
+            catTotals[t.categoryId].prev += prevAmount;
+            catTotals[t.categoryId].cons += consAmount;
+            catTotals[t.categoryId].fore += foreAmount;
         }
     });
 
@@ -716,15 +750,28 @@ function updateDashboard() {
     // Update DOM
     document.getElementById('dash-income-prev').textContent = `€ ${incomePrev.toFixed(2)}`;
     document.getElementById('dash-income-cons').textContent = `€ ${incomeCons.toFixed(2)}`;
+    document.getElementById('dash-income-fore').textContent = `€ ${incomeFore.toFixed(2)}`;
     
     document.getElementById('dash-expense-prev').textContent = `€ ${expensePrev.toFixed(2)}`;
     document.getElementById('dash-expense-cons').textContent = `€ ${expenseCons.toFixed(2)}`;
+    document.getElementById('dash-expense-fore').textContent = `€ ${expenseFore.toFixed(2)}`;
     
     const balancePrev = incomePrev - expensePrev;
     const balanceCons = incomeCons - expenseCons;
+    const balanceFore = incomeFore - expenseFore;
 
     document.getElementById('dash-balance-prev').textContent = `€ ${balancePrev.toFixed(2)}`;
     document.getElementById('dash-balance-cons').textContent = `€ ${balanceCons.toFixed(2)}`;
+    
+    const balanceForeEl = document.getElementById('dash-balance-fore');
+    balanceForeEl.textContent = `€ ${balanceFore.toFixed(2)}`;
+    
+    // Colorazione dinamica del Forecast del Bilancio
+    if (balanceFore >= 0) {
+        balanceForeEl.style.color = 'var(--success)';
+    } else {
+        balanceForeEl.style.color = 'var(--danger)';
+    }
 
     // Progress Bars - Allow percentages over 100%
     const expenseTruePercent = expensePrev > 0 ? (expenseCons / expensePrev) * 100 : 0;
