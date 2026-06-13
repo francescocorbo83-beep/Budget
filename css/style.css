@@ -345,18 +345,19 @@ body {
     gap: 0.25rem;
 }
 
-.amounts .preventivo {
-    font-size: 0.9rem;
+.amounts .preventivo,
+.amounts .consuntivo {
+    font-size: 0.85rem;
     color: var(--text-secondary);
 }
 
-.amounts .consuntivo {
+.amounts .forecast {
     font-size: 1.25rem;
     font-weight: 700;
 }
 
-.card-income .consuntivo { color: var(--success); }
-.card-expense .consuntivo { color: var(--danger); }
+.card-income .forecast { color: var(--success); }
+.card-expense .forecast { color: var(--danger); }
 
 /* Progress Charts Section */
 .charts-section {
