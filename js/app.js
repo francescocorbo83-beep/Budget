@@ -804,10 +804,81 @@ function updateAnnualChart() {
         }
     });
 
-    // Calcolo Cashflow
+    // Calcolo Patrimonio Netto Cumulativo (Opzione B con data odierna del sistema)
+    const today = new Date();
+    const todayYear = today.getFullYear();
+    const todayMonth = today.getMonth() + 1;
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+
+    function getFusedCashflow(yr, m) {
+        let income = 0;
+        let expense = 0;
+        
+        txsToAnalyze.forEach(t => {
+            const impact = getMonthlyImpact(t, yr, m);
+            if (impact <= 0) return;
+            
+            let include = false;
+            if (yr < todayYear || (yr === todayYear && m < todayMonth)) {
+                // Mese passato: solo consuntivo
+                if (t.nature === 'consuntivo') {
+                    include = true;
+                }
+            } else if (yr > todayYear || (yr === todayYear && m > todayMonth)) {
+                // Mese futuro: solo preventivo
+                if (t.nature === 'preventivo') {
+                    include = true;
+                }
+            } else {
+                // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
+                if (t.nature === 'consuntivo' && t.date <= todayStr) {
+                    include = true;
+                } else if (t.nature === 'preventivo' && t.date > todayStr) {
+                    include = true;
+                }
+            }
+            
+            if (include) {
+                if (t.type === 'income') {
+                    income += impact;
+                } else {
+                    expense += impact;
+                }
+            }
+        });
+        
+        return income - expense;
+    }
+
+    // Trova l'anno minimo per il saldo iniziale
+    let minYear = targetYear;
+    txsToAnalyze.forEach(t => {
+        const y = new Date(t.date).getFullYear();
+        if (y < minYear) {
+            minYear = y;
+        }
+    });
+
+    // Calcola il patrimonio netto accumulato prima dell'anno di analisi
+    let s0 = 0;
+    for (let yr = minYear; yr < targetYear; yr++) {
+        for (let m = 1; m <= 12; m++) {
+            s0 += getFusedCashflow(yr, m);
+        }
+    }
+
+    // Popola dataCashflow accumulando mese dopo mese
+    let cumulative = s0;
+    for (let m = 1; m <= 12; m++) {
+        cumulative += getFusedCashflow(targetYear, m);
+        dataCashflow[m - 1] = cumulative;
+    }
+
+    // Convertiamo le uscite in negativo per il grafico a specchio
     for (let i = 0; i < 12; i++) {
-        dataCashflow[i] = dataIncCons[i] - dataExpCons[i];
-        // Convertiamo le uscite in negativo per il grafico a specchio
         dataExpCons[i] = -dataExpCons[i];
         dataExpPrev[i] = -dataExpPrev[i];
     }
@@ -823,7 +894,7 @@ function updateAnnualChart() {
             datasets: [
                 {
                     type: 'line',
-                    label: 'Cashflow Netto (Reale)',
+                    label: 'Patrimonio Netto',
                     data: dataCashflow,
                     borderColor: '#f59e0b',
                     backgroundColor: '#f59e0b',
