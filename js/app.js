@@ -480,14 +480,18 @@ function renderTransactions() {
     });
 
     // Sort by date descending
-    const sorted = filteredTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sorted = filteredTxs.sort((a, b) => b.date.localeCompare(a.date));
 
     sorted.forEach(tx => {
         const cat = state.categories.find(c => c.id === tx.categoryId) || { name: 'N/D', color: '#ccc', icon: 'fa-tag' };
         const tr = document.createElement('tr');
         
+        // Parsing indipendente dal fuso orario per la visualizzazione della data
+        const [yr, mo, dy] = tx.date.split('-').map(Number);
+        const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
+        
         tr.innerHTML = `
-            <td>${new Date(tx.date).toLocaleDateString('it-IT')}</td>
+            <td>${formattedDate}</td>
             <td><strong>${tx.title}</strong></td>
             <td><span class="badge badge-cat" style="background: ${cat.color}40; color: ${cat.color}"><i class="${cat.icon}"></i> ${cat.name}</span></td>
             <td><span class="badge ${tx.type === 'income' ? 'badge-income' : 'badge-expense'}">${tx.type === 'income' ? 'Entrata' : 'Uscita'}</span></td>
@@ -658,9 +662,7 @@ function renderCategories() {
 }
 
 function getMonthlyImpact(tx, targetYear, targetMonth) {
-    const txDate = new Date(tx.date);
-    const txYear = txDate.getFullYear();
-    const txMonth = txDate.getMonth() + 1;
+    const [txYear, txMonth] = tx.date.split('-').map(Number);
     const txAmount = parseFloat(tx.amount) || 0;
 
     // Se è "Una Tantum", la logica è identica per preventivo e consuntivo
@@ -708,8 +710,7 @@ function getMonthlyImpact(tx, targetYear, targetMonth) {
 }
 
 function getTxOccurrenceDate(tx, targetYear, targetMonth) {
-    const txDateObj = new Date(tx.date);
-    const day = txDateObj.getDate();
+    const day = parseInt(tx.date.split('-')[2]);
     const tempDate = new Date(targetYear, targetMonth, 0);
     const targetDay = Math.min(day, tempDate.getDate());
     return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
@@ -1083,7 +1084,7 @@ function updateAnnualChart() {
     // Trova l'anno minimo per il saldo iniziale
     let minYear = targetYear;
     txsToAnalyze.forEach(t => {
-        const y = new Date(t.date).getFullYear();
+        const y = parseInt(t.date.split('-')[0]);
         if (y < minYear) {
             minYear = y;
         }
