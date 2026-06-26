@@ -496,7 +496,7 @@ function renderTransactions() {
             <td><span class="badge badge-cat" style="background: ${cat.color}40; color: ${cat.color}"><i class="${cat.icon}"></i> ${cat.name}</span></td>
             <td><span class="badge ${tx.type === 'income' ? 'badge-income' : 'badge-expense'}">${tx.type === 'income' ? 'Entrata' : 'Uscita'}</span></td>
             <td>
-                <span class="badge ${tx.nature === 'preventivo' ? 'badge-prev' : 'badge-cons'}">${tx.nature === 'preventivo' ? 'Budget' : 'Consuntivo'}</span>
+                <span class="badge ${tx.nature === 'preventivo' ? 'badge-prev' : tx.nature === 'consuntivo' ? 'badge-cons' : 'badge-acc'}">${tx.nature === 'preventivo' ? 'Budget' : tx.nature === 'consuntivo' ? 'Consuntivo' : 'Accantonamento'}</span>
             </td>
             <td>
                 ${
@@ -661,38 +661,32 @@ function renderCategories() {
     populateCategorySelect();
 }
 
-function getMonthlyImpact(tx, targetYear, targetMonth) {
+function getMonthlyImpact(tx, targetYear, targetMonth, calculationMode) {
     const [txYear, txMonth] = tx.date.split('-').map(Number);
     const txAmount = parseFloat(tx.amount) || 0;
 
-    // Se è "Una Tantum", la logica è identica per preventivo e consuntivo
-    if (tx.frequency === 'one-time') {
-        if (txYear === targetYear && txMonth === targetMonth) {
-            return txAmount;
+    // Determina il mode in base all'argomento o alla natura del movimento
+    let mode = calculationMode;
+    if (!mode) {
+        if (tx.nature === 'consuntivo') {
+            mode = 'cassa';
+        } else {
+            // Per preventivo e accantonamento di default usiamo competenza (accantonamento)
+            mode = 'accantonamento';
         }
-        return 0;
     }
 
-    if (tx.nature === 'consuntivo') {
-        // Logica a CASSA (Cash Basis)
-        if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
-            return 0; // Transazione futura
+    if (mode === 'accantonamento') {
+        // Ignora movimenti una tantum e mensili
+        if (tx.frequency === 'one-time' || tx.frequency === 'monthly') {
+            if (!calculationMode) {
+                return getCassaImpact();
+            }
+            return 0;
         }
-        const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
-        let isHit = false;
-        
-        if (tx.frequency === 'monthly') isHit = true;
-        else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
-        else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
-        else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
-        else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
-        
-        return isHit ? txAmount : 0;
-    } else {
-        // Logica ad ACCANTONAMENTO (Accrual Basis) per il Preventivo
+
         let p = 1;
-        if (tx.frequency === 'monthly') p = 1;
-        else if (tx.frequency === 'bimonthly') p = 2;
+        if (tx.frequency === 'bimonthly') p = 2;
         else if (tx.frequency === 'quarterly') p = 3;
         else if (tx.frequency === 'semiannual') p = 6;
         else if (tx.frequency === 'annual') p = 12;
@@ -704,9 +698,38 @@ function getMonthlyImpact(tx, targetYear, targetMonth) {
         if (absoluteTargetMonth >= absoluteStartMonth) {
             return txAmount / p;
         }
-
         return 0;
     }
+
+    function getCassaImpact() {
+        if (tx.nature === 'accantonamento') {
+            return 0; // Gli accantonamenti non hanno flusso di cassa reale
+        }
+
+        if (tx.frequency === 'one-time') {
+            if (txYear === targetYear && txMonth === targetMonth) {
+                return txAmount;
+            }
+            return 0;
+        }
+
+        if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
+            return 0;
+        }
+
+        const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
+        let isHit = false;
+        
+        if (tx.frequency === 'monthly') isHit = true;
+        else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
+        else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
+        else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
+        else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
+        
+        return isHit ? txAmount : 0;
+    }
+
+    return getCassaImpact();
 }
 
 function getTxOccurrenceDate(tx, targetYear, targetMonth) {
@@ -753,48 +776,53 @@ function updateDashboard() {
         let consAmount = 0;
         let foreAmount = 0;
         targetMonths.forEach(ym => {
-            const impact = getMonthlyImpact(t, ym.year, ym.month);
-            if (impact === 0) return;
-            
-            // 1. Budget (Preventivo)
-            if (t.nature === 'preventivo') {
-                prevAmount += impact;
-                // Calcoliamo il budget finanziario a cassa (cassa per il preventivo)
-                const cashImpact = getMonthlyImpact({ ...t, nature: 'consuntivo' }, ym.year, ym.month);
+            // 1. Budget (Preventivo / Accantonamento)
+            if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
+                const compImpact = (t.frequency === 'one-time' || t.frequency === 'monthly') ?
+                    getMonthlyImpact(t, ym.year, ym.month, 'cassa') :
+                    getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
+                prevAmount += compImpact;
+                
+                const cashImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
                 prevCashAmount += cashImpact;
             }
             
             // 2. Consuntivo (Reale)
             if (t.nature === 'consuntivo') {
-                consAmount += impact;
+                consAmount += getMonthlyImpact(t, ym.year, ym.month, 'cassa');
             }
             
             // 3. Forecast
             let includeInFore = false;
+            let foreImpact = 0;
             if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
                 // Mese passato: solo consuntivo
                 if (t.nature === 'consuntivo') {
                     includeInFore = true;
+                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
                 }
             } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
                 // Mese futuro: solo preventivo
                 if (t.nature === 'preventivo') {
                     includeInFore = true;
+                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
                 }
             } else {
                 // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
                 if (t.nature === 'consuntivo' && t.date <= todayStr) {
                     includeInFore = true;
+                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
                 } else if (t.nature === 'preventivo') {
                     const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
                     if (occurrenceDateStr > todayStr) {
                         includeInFore = true;
+                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
                     }
                 }
             }
             
             if (includeInFore) {
-                foreAmount += impact;
+                foreAmount += foreImpact;
             }
         });
         
@@ -898,30 +926,39 @@ function updateDashboard() {
     if (detailsExpenseDiv) detailsExpenseDiv.innerHTML = expenseHtml;
     if (detailsIncomeDiv) detailsIncomeDiv.innerHTML = incomeHtml;
 
-    // Update DOM
-    document.getElementById('dash-income-prev').textContent = `€ ${incomePrev.toFixed(2)}`;
-    document.getElementById('dash-income-cons').textContent = `€ ${incomeCons.toFixed(2)}`;
-    document.getElementById('dash-income-fore').textContent = `€ ${incomeFore.toFixed(2)}`;
+    // Update DOM safely
+    const setElText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    };
+    const setElWidth = (id, width) => {
+        const el = document.getElementById(id);
+        if (el) el.style.width = width;
+    };
+
+    setElText('dash-income-prev', `€ ${incomePrev.toFixed(2)}`);
+    setElText('dash-income-cons', `€ ${incomeCons.toFixed(2)}`);
+    setElText('dash-income-fore', `€ ${incomeFore.toFixed(2)}`);
     
-    document.getElementById('dash-expense-prev').textContent = `€ ${expensePrev.toFixed(2)}`;
-    document.getElementById('dash-expense-cons').textContent = `€ ${expenseCons.toFixed(2)}`;
-    document.getElementById('dash-expense-fore').textContent = `€ ${expenseFore.toFixed(2)}`;
+    setElText('dash-expense-prev', `€ ${expensePrev.toFixed(2)}`);
+    setElText('dash-expense-cons', `€ ${expenseCons.toFixed(2)}`);
+    setElText('dash-expense-fore', `€ ${expenseFore.toFixed(2)}`);
     
     const balancePrev = incomePrev - expensePrev;
     const balanceCons = incomeCons - expenseCons;
     const balanceFore = incomeFore - expenseFore;
 
-    document.getElementById('dash-balance-prev').textContent = `€ ${balancePrev.toFixed(2)}`;
-    document.getElementById('dash-balance-cons').textContent = `€ ${balanceCons.toFixed(2)}`;
+    setElText('dash-balance-prev', `€ ${balancePrev.toFixed(2)}`);
+    setElText('dash-balance-cons', `€ ${balanceCons.toFixed(2)}`);
     
     const balanceForeEl = document.getElementById('dash-balance-fore');
-    balanceForeEl.textContent = `€ ${balanceFore.toFixed(2)}`;
-    
-    // Colorazione dinamica del Forecast del Bilancio
-    if (balanceFore >= 0) {
-        balanceForeEl.style.color = 'var(--success)';
-    } else {
-        balanceForeEl.style.color = 'var(--danger)';
+    if (balanceForeEl) {
+        balanceForeEl.textContent = `€ ${balanceFore.toFixed(2)}`;
+        if (balanceFore >= 0) {
+            balanceForeEl.style.color = 'var(--success)';
+        } else {
+            balanceForeEl.style.color = 'var(--danger)';
+        }
     }
 
     // Progress Bars - Allow percentages over 100%
@@ -937,51 +974,59 @@ function updateDashboard() {
     const incomeCashWidth = Math.min(incomeCashTruePercent, 100);
 
     // Update Competenza elements (Expense)
-    document.getElementById('progress-expense').style.width = `${expenseWidth}%`;
+    setElWidth('progress-expense', `${expenseWidth}%`);
     const expText = document.getElementById('progress-expense-text');
-    expText.textContent = `${expenseTruePercent.toFixed(1)}%`;
-    if (expenseTruePercent > 100) {
-        expText.style.color = 'var(--danger)';
-        expText.style.fontWeight = 'bold';
-    } else {
-        expText.style.color = '';
-        expText.style.fontWeight = '';
+    if (expText) {
+        expText.textContent = `${expenseTruePercent.toFixed(1)}%`;
+        if (expenseTruePercent > 100) {
+            expText.style.color = 'var(--danger)';
+            expText.style.fontWeight = 'bold';
+        } else {
+            expText.style.color = '';
+            expText.style.fontWeight = '';
+        }
     }
 
     // Update Cassa elements (Expense)
-    document.getElementById('progress-expense-cash').style.width = `${expenseCashWidth}%`;
+    setElWidth('progress-expense-cash', `${expenseCashWidth}%`);
     const expCashText = document.getElementById('progress-expense-cash-text');
-    expCashText.textContent = expensePrevCash > 0 ? `${expenseCashTruePercent.toFixed(1)}%` : '-';
-    if (expensePrevCash > 0 && expenseCashTruePercent > 100) {
-        expCashText.style.color = 'var(--danger)';
-        expCashText.style.fontWeight = 'bold';
-    } else {
-        expCashText.style.color = '';
-        expCashText.style.fontWeight = '';
+    if (expCashText) {
+        expCashText.textContent = expensePrevCash > 0 ? `${expenseCashTruePercent.toFixed(1)}%` : '-';
+        if (expensePrevCash > 0 && expenseCashTruePercent > 100) {
+            expCashText.style.color = 'var(--danger)';
+            expCashText.style.fontWeight = 'bold';
+        } else {
+            expCashText.style.color = '';
+            expCashText.style.fontWeight = '';
+        }
     }
 
     // Update Competenza elements (Income)
-    document.getElementById('progress-income').style.width = `${incomeWidth}%`;
+    setElWidth('progress-income', `${incomeWidth}%`);
     const incText = document.getElementById('progress-income-text');
-    incText.textContent = `${incomeTruePercent.toFixed(1)}%`;
-    if (incomeTruePercent > 100) {
-        incText.style.color = 'var(--success)';
-        incText.style.fontWeight = 'bold';
-    } else {
-        incText.style.color = '';
-        incText.style.fontWeight = '';
+    if (incText) {
+        incText.textContent = `${incomeTruePercent.toFixed(1)}%`;
+        if (incomeTruePercent > 100) {
+            incText.style.color = 'var(--success)';
+            incText.style.fontWeight = 'bold';
+        } else {
+            incText.style.color = '';
+            incText.style.fontWeight = '';
+        }
     }
 
     // Update Cassa elements (Income)
-    document.getElementById('progress-income-cash').style.width = `${incomeCashWidth}%`;
+    setElWidth('progress-income-cash', `${incomeCashWidth}%`);
     const incCashText = document.getElementById('progress-income-cash-text');
-    incCashText.textContent = incomePrevCash > 0 ? `${incomeCashTruePercent.toFixed(1)}%` : '-';
-    if (incomePrevCash > 0 && incomeCashTruePercent > 100) {
-        incCashText.style.color = 'var(--success)';
-        incCashText.style.fontWeight = 'bold';
-    } else {
-        incCashText.style.color = '';
-        incCashText.style.fontWeight = '';
+    if (incCashText) {
+        incCashText.textContent = incomePrevCash > 0 ? `${incomeCashTruePercent.toFixed(1)}%` : '-';
+        if (incomePrevCash > 0 && incomeCashTruePercent > 100) {
+            incCashText.style.color = 'var(--success)';
+            incCashText.style.fontWeight = 'bold';
+        } else {
+            incCashText.style.color = '';
+            incCashText.style.fontWeight = '';
+        }
     }
 
     updateAnnualChart();
@@ -1043,37 +1088,39 @@ function updateAnnualChart() {
         let expense = 0;
         
         txsToAnalyze.forEach(t => {
-            const impact = getMonthlyImpact(t, yr, m);
-            if (impact === 0) return;
-            
             let include = false;
+            let foreImpact = 0;
             if (yr < todayYear || (yr === todayYear && m < todayMonth)) {
                 // Mese passato: solo consuntivo
                 if (t.nature === 'consuntivo') {
                     include = true;
+                    foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
                 }
             } else if (yr > todayYear || (yr === todayYear && m > todayMonth)) {
                 // Mese futuro: solo preventivo
                 if (t.nature === 'preventivo') {
                     include = true;
+                    foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
                 }
             } else {
                 // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
                 if (t.nature === 'consuntivo' && t.date <= todayStr) {
                     include = true;
+                    foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
                 } else if (t.nature === 'preventivo') {
                     const occurrenceDateStr = getTxOccurrenceDate(t, yr, m);
                     if (occurrenceDateStr > todayStr) {
                         include = true;
+                        foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
                     }
                 }
             }
             
             if (include) {
                 if (t.type === 'income') {
-                    income += impact;
+                    income += foreImpact;
                 } else {
-                    expense += impact;
+                    expense += foreImpact;
                 }
             }
         });
