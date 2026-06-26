@@ -75,7 +75,8 @@
                     </div>
                 </div>
 
-                <!-- Summary Cards -->
+                <!-- Sezioni della Dashboard disabilitate temporaneamente per rebuild -->
+                <!--
                 <div class="summary-cards">
                     <div class="card glass-panel card-income">
                         <div class="card-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
@@ -112,11 +113,9 @@
                     </div>
                 </div>
 
-                <!-- Progress Areas -->
                 <div class="charts-section glass-panel">
                     <h3>Avanzamento Consuntivo vs Preventivo (Uscite)</h3>
                     <div class="progress-container">
-                        <!-- Competenza -->
                         <div class="progress-labels">
                             <span>Utilizzo Budget Spese (Competenza)</span>
                             <span id="progress-expense-text">0%</span>
@@ -125,7 +124,6 @@
                             <div class="progress-bar fill-expense" id="progress-expense" style="width: 0%"></div>
                         </div>
                         
-                        <!-- Cassa -->
                         <div class="progress-labels">
                             <span>Utilizzo Budget Spese (Cassa)</span>
                             <span id="progress-expense-cash-text">0%</span>
@@ -142,7 +140,6 @@
                     
                     <h3 style="margin-top: 1.5rem;">Avanzamento Consuntivo vs Preventivo (Entrate)</h3>
                     <div class="progress-container">
-                        <!-- Competenza -->
                         <div class="progress-labels">
                             <span>Raggiungimento Obiettivo Entrate (Competenza)</span>
                             <span id="progress-income-text">0%</span>
@@ -151,7 +148,6 @@
                             <div class="progress-bar fill-income" id="progress-income" style="width: 0%"></div>
                         </div>
                         
-                        <!-- Cassa -->
                         <div class="progress-labels">
                             <span>Raggiungimento Obiettivo Entrate (Cassa)</span>
                             <span id="progress-income-cash-text">0%</span>
@@ -167,7 +163,6 @@
                     </div>
                 </div>
 
-                <!-- Annual Chart Area -->
                 <div class="chart-section glass-panel" style="margin-top: 2rem; padding: 2rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
                         <h3 style="margin-bottom: 0; font-weight: 500;">Andamento Annuale (Cashflow)</h3>
@@ -179,6 +174,7 @@
                         <canvas id="annualChart"></canvas>
                     </div>
                 </div>
+                -->
             </div>
 
             <!-- View: Transactions -->
@@ -218,6 +214,7 @@
                             <option value="all">Tutte le Nature</option>
                             <option value="preventivo">Budget</option>
                             <option value="consuntivo">Consuntivo</option>
+                            <option value="accantonamento">Accantonamento</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -359,6 +356,7 @@
                         <select id="tx-nature" required>
                             <option value="preventivo">Budget (Preventivo)</option>
                             <option value="consuntivo">Consuntivo (Reale)</option>
+                            <option value="accantonamento">Accantonamento</option>
                         </select>
                     </div>
                     <div class="form-group">
