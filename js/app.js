@@ -11,7 +11,8 @@ const DEFAULT_CATEGORIES = [
 let state = {
     categories: [],
     transactions: [],
-    lastSync: null
+    lastSync: null,
+    activeDashboardView: 'financial'
 };
 
 let annualChartInstance = null;
@@ -27,6 +28,9 @@ function loadLocalData() {
     const localData = localStorage.getItem('nexbudget_data');
     if (localData) {
         state = JSON.parse(localData);
+        if (!state.activeDashboardView) {
+            state.activeDashboardView = 'financial';
+        }
     } else {
         state.categories = [...DEFAULT_CATEGORIES];
         saveLocalData();
@@ -138,6 +142,36 @@ function initUI() {
     });
 
     document.getElementById('form-transaction').addEventListener('submit', handleTransactionSubmit);
+
+    // Dashboard View Selectors
+    const btnFinancial = document.getElementById('btn-view-financial');
+    const btnEconomic = document.getElementById('btn-view-economic');
+    
+    if (btnFinancial && btnEconomic) {
+        const updateViewButtons = () => {
+            const isFin = (state.activeDashboardView || 'financial') === 'financial';
+            btnFinancial.style.background = isFin ? 'var(--primary)' : 'transparent';
+            btnFinancial.style.color = isFin ? 'white' : 'var(--text-secondary)';
+            btnEconomic.style.background = isFin ? 'transparent' : 'var(--primary)';
+            btnEconomic.style.color = isFin ? 'var(--text-secondary)' : 'white';
+        };
+
+        btnFinancial.addEventListener('click', () => {
+            state.activeDashboardView = 'financial';
+            saveLocalData();
+            updateViewButtons();
+            updateDashboard();
+        });
+
+        btnEconomic.addEventListener('click', () => {
+            state.activeDashboardView = 'economic';
+            saveLocalData();
+            updateViewButtons();
+            updateDashboard();
+        });
+
+        updateViewButtons();
+    }
 
     // Budget Transfer Modals
     const btnAddTransfer = document.getElementById('btn-add-transfer');
@@ -770,59 +804,125 @@ function updateDashboard() {
     const dd = String(today.getDate()).padStart(2, '0');
     const todayStr = `${yyyy}-${mm}-${dd}`;
 
+    const isFin = (state.activeDashboardView || 'financial') === 'financial';
+
     state.transactions.forEach(t => {
         let prevAmount = 0;
         let prevCashAmount = 0;
         let consAmount = 0;
         let foreAmount = 0;
         targetMonths.forEach(ym => {
-            // 1. Budget (Preventivo / Accantonamento)
-            if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
-                const compImpact = (t.frequency === 'one-time' || t.frequency === 'monthly') ?
-                    getMonthlyImpact(t, ym.year, ym.month, 'cassa') :
-                    getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
-                prevAmount += compImpact;
+            if (isFin) {
+                // --- VISTA FINANZIARIA (CASSA) ---
                 
-                const cashImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                prevCashAmount += cashImpact;
-            }
-            
-            // 2. Consuntivo (Reale)
-            if (t.nature === 'consuntivo') {
-                consAmount += getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-            }
-            
-            // 3. Forecast
-            let includeInFore = false;
-            let foreImpact = 0;
-            if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
-                // Mese passato: solo consuntivo
-                if (t.nature === 'consuntivo') {
-                    includeInFore = true;
-                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                }
-            } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
-                // Mese futuro: solo preventivo
+                // 1. Budget (Solo preventivi, calcolati a Cassa)
                 if (t.nature === 'preventivo') {
-                    includeInFore = true;
-                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                    const impact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                    prevAmount += impact;
+                    prevCashAmount += impact;
                 }
-            } else {
-                // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
-                if (t.nature === 'consuntivo' && t.date <= todayStr) {
-                    includeInFore = true;
-                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                } else if (t.nature === 'preventivo') {
-                    const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
-                    if (occurrenceDateStr > todayStr) {
+                
+                // 2. Reale (Consuntivo, calcolato a Cassa)
+                if (t.nature === 'consuntivo') {
+                    consAmount += getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                }
+                
+                // 3. Forecast
+                let includeInFore = false;
+                let foreImpact = 0;
+                if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
+                    // Mese passato: solo consuntivo
+                    if (t.nature === 'consuntivo') {
                         includeInFore = true;
                         foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
                     }
+                } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
+                    // Mese futuro: solo preventivo
+                    if (t.nature === 'preventivo') {
+                        includeInFore = true;
+                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                    }
+                } else {
+                    // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
+                    if (t.nature === 'consuntivo' && t.date <= todayStr) {
+                        includeInFore = true;
+                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                    } else if (t.nature === 'preventivo') {
+                        const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
+                        if (occurrenceDateStr > todayStr) {
+                            includeInFore = true;
+                            foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                        }
+                    }
                 }
-            }
-            
-            if (includeInFore) {
-                foreAmount += foreImpact;
+                
+                if (includeInFore) {
+                    foreAmount += foreImpact;
+                }
+                
+            } else {
+                // --- VISTA ECONOMICA (COMPETENZA) ---
+                
+                // Helper per calcolare l'impatto di competenza
+                const getCompImpact = () => {
+                    return (t.frequency === 'one-time' || t.frequency === 'monthly') ?
+                        getMonthlyImpact(t, ym.year, ym.month, 'cassa') :
+                        getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
+                };
+
+                // 1. Budget (Preventivo e accantonamenti espliciti)
+                if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
+                    prevAmount += getCompImpact();
+                    prevCashAmount += getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                }
+                
+                // 2. Reale (Consuntivo spalmato per competenza)
+                if (t.nature === 'consuntivo') {
+                    consAmount += getCompImpact();
+                }
+                
+                // 3. Forecast
+                let includeInFore = false;
+                let foreImpact = 0;
+                if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
+                    // Mese passato: solo consuntivo (competenza)
+                    if (t.nature === 'consuntivo') {
+                        includeInFore = true;
+                        foreImpact = getCompImpact();
+                    }
+                } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
+                    // Mese futuro: solo preventivo (competenza)
+                    if (t.nature === 'preventivo') {
+                        includeInFore = true;
+                        foreImpact = getCompImpact();
+                    }
+                } else {
+                    // Mese in corso
+                    if (t.nature === 'consuntivo') {
+                        // Consuntivo fino a oggi compreso (competenza)
+                        if (t.date <= todayStr) {
+                            includeInFore = true;
+                            foreImpact = getCompImpact();
+                        }
+                    } else if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
+                        if (t.frequency === 'one-time' || t.frequency === 'monthly') {
+                            // Budget mensili / una tantum: inclusi solo se futuri rispetto ad oggi
+                            const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
+                            if (occurrenceDateStr > todayStr) {
+                                includeInFore = true;
+                                foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                            }
+                        } else {
+                            // Accantonamenti (frequenza > mensile): considerati sul 1° del mese, quindi sempre inclusi
+                            includeInFore = true;
+                            foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
+                        }
+                    }
+                }
+                
+                if (includeInFore) {
+                    foreAmount += foreImpact;
+                }
             }
         });
         
