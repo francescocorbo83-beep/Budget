@@ -314,6 +314,58 @@ function initUI() {
         });
     }
 
+    // Event delegation for collapsible summary table
+    const tableBody = document.getElementById('dashboard-table-body');
+    if (tableBody) {
+        tableBody.addEventListener('click', (e) => {
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+
+            if (tr.classList.contains('row-metric')) {
+                const metric = tr.getAttribute('data-metric');
+                const isExpanded = tr.getAttribute('data-expanded') === 'true';
+                
+                tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
+                
+                const catRows = tableBody.querySelectorAll(`.row-category[data-metric="${metric}"]`);
+                const txRows = tableBody.querySelectorAll(`.row-transaction[data-metric="${metric}"]`);
+                
+                if (!isExpanded) {
+                    // Expand: show categories
+                    catRows.forEach(row => {
+                        row.classList.remove('hidden');
+                        // If category was previously expanded, show its transactions too
+                        const catId = row.getAttribute('data-category');
+                        const catExpanded = row.getAttribute('data-expanded') === 'true';
+                        if (catExpanded) {
+                            const catTxRows = tableBody.querySelectorAll(`.row-transaction[data-metric="${metric}"][data-category="${catId}"]`);
+                            catTxRows.forEach(txRow => txRow.classList.remove('hidden'));
+                        }
+                    });
+                } else {
+                    // Collapse: hide all category and transaction rows under this metric
+                    catRows.forEach(row => row.classList.add('hidden'));
+                    txRows.forEach(row => row.classList.add('hidden'));
+                }
+            } 
+            else if (tr.classList.contains('row-category')) {
+                const metric = tr.getAttribute('data-metric');
+                const category = tr.getAttribute('data-category');
+                const isExpanded = tr.getAttribute('data-expanded') === 'true';
+                
+                tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
+                
+                const txRows = tableBody.querySelectorAll(`.row-transaction[data-metric="${metric}"][data-category="${category}"]`);
+                
+                if (!isExpanded) {
+                    txRows.forEach(row => row.classList.remove('hidden'));
+                } else {
+                    txRows.forEach(row => row.classList.add('hidden'));
+                }
+            }
+        });
+    }
+
     // Render Initial Data
     renderTransactions();
     renderCategories();
@@ -773,6 +825,110 @@ function getTxOccurrenceDate(tx, targetYear, targetMonth) {
     return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
 }
 
+function formatTableCellValue(val, showZeroAsHyphen = false) {
+    if (Math.abs(val) < 0.005) {
+        return showZeroAsHyphen ? '-' : new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(0);
+    }
+    return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val);
+}
+
+function getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr) {
+    let realeVal = 0;
+    let budgetVal = 0;
+    let forecastVal = 0;
+
+    const getCompImpact = () => {
+        return (t.frequency === 'one-time' || t.frequency === 'monthly') ?
+            getMonthlyImpact(t, ym.year, ym.month, 'cassa') :
+            getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
+    };
+
+    if (isFin) {
+        // --- VISTA FINANZIARIA (CASSA) ---
+        if (t.nature === 'preventivo') {
+            budgetVal = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+        }
+        
+        if (t.nature === 'consuntivo') {
+            realeVal = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+        }
+        
+        let includeInFore = false;
+        let foreImpact = 0;
+        if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
+            if (t.nature === 'consuntivo') {
+                includeInFore = true;
+                foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+            }
+        } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
+            if (t.nature === 'preventivo') {
+                includeInFore = true;
+                foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+            }
+        } else {
+            if (t.nature === 'consuntivo' && t.date <= todayStr) {
+                includeInFore = true;
+                foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+            } else if (t.nature === 'preventivo') {
+                const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
+                if (occurrenceDateStr > todayStr) {
+                    includeInFore = true;
+                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                }
+            }
+        }
+        if (includeInFore) {
+            forecastVal = foreImpact;
+        }
+    } else {
+        // --- VISTA ECONOMICA (COMPETENZA) ---
+        if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
+            budgetVal = getCompImpact();
+        }
+        
+        if (t.nature === 'consuntivo') {
+            realeVal = getCompImpact();
+        }
+        
+        let includeInFore = false;
+        let foreImpact = 0;
+        if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
+            if (t.nature === 'consuntivo') {
+                includeInFore = true;
+                foreImpact = getCompImpact();
+            }
+        } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
+            if (t.nature === 'preventivo') {
+                includeInFore = true;
+                foreImpact = getCompImpact();
+            }
+        } else {
+            if (t.nature === 'consuntivo') {
+                if (t.date <= todayStr) {
+                    includeInFore = true;
+                    foreImpact = getCompImpact();
+                }
+            } else if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
+                if (t.frequency === 'one-time' || t.frequency === 'monthly') {
+                    const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
+                    if (occurrenceDateStr > todayStr) {
+                        includeInFore = true;
+                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
+                    }
+                } else {
+                    includeInFore = true;
+                    foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
+                }
+            }
+        }
+        if (includeInFore) {
+            forecastVal = foreImpact;
+        }
+    }
+
+    return { realeVal, budgetVal, forecastVal };
+}
+
 // Dashboard Calculation
 function updateDashboard() {
     const period = document.getElementById('filter-period').value;
@@ -790,12 +946,6 @@ function updateDashboard() {
         targetMonths.push({ year: targetYear, month: targetMonth });
     }
 
-    let incomePrev = 0, incomePrevCash = 0, incomeCons = 0, incomeFore = 0;
-    let expensePrev = 0, expensePrevCash = 0, expenseCons = 0, expenseFore = 0;
-    
-    // Oggetto per memorizzare i totali raggruppati per categoria
-    const catTotals = {};
-
     const today = new Date();
     const todayYear = today.getFullYear();
     const todayMonth = today.getMonth() + 1;
@@ -806,327 +956,199 @@ function updateDashboard() {
 
     const isFin = (state.activeDashboardView || 'financial') === 'financial';
 
-    state.transactions.forEach(t => {
-        let prevAmount = 0;
-        let prevCashAmount = 0;
-        let consAmount = 0;
-        let foreAmount = 0;
-        targetMonths.forEach(ym => {
-            if (isFin) {
-                // --- VISTA FINANZIARIA (CASSA) ---
-                
-                // 1. Budget (Solo preventivi, calcolati a Cassa)
-                if (t.nature === 'preventivo') {
-                    const impact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                    prevAmount += impact;
-                    prevCashAmount += impact;
-                }
-                
-                // 2. Reale (Consuntivo, calcolato a Cassa)
-                if (t.nature === 'consuntivo') {
-                    consAmount += getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                }
-                
-                // 3. Forecast
-                let includeInFore = false;
-                let foreImpact = 0;
-                if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
-                    // Mese passato: solo consuntivo
-                    if (t.nature === 'consuntivo') {
-                        includeInFore = true;
-                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                    }
-                } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
-                    // Mese futuro: solo preventivo
-                    if (t.nature === 'preventivo') {
-                        includeInFore = true;
-                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                    }
-                } else {
-                    // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
-                    if (t.nature === 'consuntivo' && t.date <= todayStr) {
-                        includeInFore = true;
-                        foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                    } else if (t.nature === 'preventivo') {
-                        const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
-                        if (occurrenceDateStr > todayStr) {
-                            includeInFore = true;
-                            foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                        }
-                    }
-                }
-                
-                if (includeInFore) {
-                    foreAmount += foreImpact;
-                }
-                
-            } else {
-                // --- VISTA ECONOMICA (COMPETENZA) ---
-                
-                // Helper per calcolare l'impatto di competenza
-                const getCompImpact = () => {
-                    return (t.frequency === 'one-time' || t.frequency === 'monthly') ?
-                        getMonthlyImpact(t, ym.year, ym.month, 'cassa') :
-                        getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
-                };
+    const tree = {
+        forecast: { name: 'Forecast', entrate: 0, uscite: 0, categories: {} },
+        budget: { name: 'Budget', entrate: 0, uscite: 0, categories: {} },
+        reale: { name: 'Reale', entrate: 0, uscite: 0, categories: {} }
+    };
 
-                // 1. Budget (Preventivo e accantonamenti espliciti)
-                if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
-                    prevAmount += getCompImpact();
-                    prevCashAmount += getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                }
+    function addToTree(metricKey, cat, tx, amount) {
+        const metric = tree[metricKey];
+        if (tx.type === 'income') {
+            metric.entrate += amount;
+        } else {
+            metric.uscite += amount;
+        }
+
+        if (!metric.categories[cat.id]) {
+            metric.categories[cat.id] = {
+                category: cat,
+                entrate: 0,
+                uscite: 0,
+                transactions: {}
+            };
+        }
+
+        const catData = metric.categories[cat.id];
+        if (tx.type === 'income') {
+            catData.entrate += amount;
+        } else {
+            catData.uscite += amount;
+        }
+
+        if (!catData.transactions[tx.id]) {
+            catData.transactions[tx.id] = {
+                tx: tx,
+                amount: 0
+            };
+        }
+        catData.transactions[tx.id].amount += amount;
+    }
+
+    state.transactions.forEach(t => {
+        const cat = state.categories.find(c => c.id === t.categoryId) || { id: t.categoryId, name: 'N/D', color: '#ccc', icon: 'fa-solid fa-tag' };
+
+        let txReale = 0;
+        let txBudget = 0;
+        let txForecast = 0;
+
+        targetMonths.forEach(ym => {
+            const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+            txReale += vals.realeVal;
+            txBudget += vals.budgetVal;
+            txForecast += vals.forecastVal;
+        });
+
+        if (Math.abs(txReale) > 0.0001) {
+            addToTree('reale', cat, t, txReale);
+        }
+        if (Math.abs(txBudget) > 0.0001) {
+            addToTree('budget', cat, t, txBudget);
+        }
+        if (Math.abs(txForecast) > 0.0001) {
+            addToTree('forecast', cat, t, txForecast);
+        }
+    });
+
+    const tbody = document.getElementById('dashboard-table-body');
+    if (tbody) {
+        let html = '';
+        const metrics = ['forecast', 'budget', 'reale'];
+        
+        metrics.forEach(metricKey => {
+            const metric = tree[metricKey];
+            const metricBalance = metric.entrate - metric.uscite;
+            
+            html += `
+                <tr class="row-metric" data-metric="${metricKey}" data-expanded="false">
+                    <td style="padding-left: 1rem;">
+                        <i class="fa-solid fa-chevron-right chevron-icon" style="color: var(--text-secondary);"></i>
+                        <strong>${metric.name}</strong>
+                    </td>
+                    <td style="text-align: right; color: var(--success); font-weight: 600;">
+                        ${formatTableCellValue(metric.entrate)}
+                    </td>
+                    <td style="text-align: right; color: var(--danger); font-weight: 600;">
+                        ${formatTableCellValue(metric.uscite)}
+                    </td>
+                    <td style="text-align: right; font-weight: 600; color: ${metricBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                        ${formatTableCellValue(metricBalance)}
+                    </td>
+                </tr>
+            `;
+            
+            const sortedCatIds = Object.keys(metric.categories).sort((a, b) => {
+                const nameA = metric.categories[a].category.name.toLowerCase();
+                const nameB = metric.categories[b].category.name.toLowerCase();
+                return nameA.localeCompare(nameB);
+            });
+            
+            sortedCatIds.forEach(catId => {
+                const catData = metric.categories[catId];
+                const cat = catData.category;
+                const catBalance = catData.entrate - catData.uscite;
                 
-                // 2. Reale (Consuntivo spalmato per competenza)
-                if (t.nature === 'consuntivo') {
-                    consAmount += getCompImpact();
-                }
+                html += `
+                    <tr class="row-category hidden" data-metric="${metricKey}" data-category="${catId}" data-expanded="false">
+                        <td class="indent-category">
+                            <div class="category-name-wrapper">
+                                <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.8rem; color: var(--text-secondary);"></i>
+                                <i class="${cat.icon}" style="color: ${cat.color}; width: 16px; text-align: center;"></i>
+                                <span>${cat.name}</span>
+                            </div>
+                        </td>
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">
+                            ${formatTableCellValue(catData.entrate, true)}
+                        </td>
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">
+                            ${formatTableCellValue(catData.uscite, true)}
+                        </td>
+                        <td style="text-align: right; font-weight: 500; font-size: 0.9rem; color: ${catBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                            ${formatTableCellValue(catBalance)}
+                        </td>
+                    </tr>
+                `;
                 
-                // 3. Forecast
-                let includeInFore = false;
-                let foreImpact = 0;
-                if (ym.year < todayYear || (ym.year === todayYear && ym.month < todayMonth)) {
-                    // Mese passato: solo consuntivo (competenza)
-                    if (t.nature === 'consuntivo') {
-                        includeInFore = true;
-                        foreImpact = getCompImpact();
-                    }
-                } else if (ym.year > todayYear || (ym.year === todayYear && ym.month > todayMonth)) {
-                    // Mese futuro: solo preventivo (competenza)
-                    if (t.nature === 'preventivo') {
-                        includeInFore = true;
-                        foreImpact = getCompImpact();
-                    }
-                } else {
-                    // Mese in corso
-                    if (t.nature === 'consuntivo') {
-                        // Consuntivo fino a oggi compreso (competenza)
-                        if (t.date <= todayStr) {
-                            includeInFore = true;
-                            foreImpact = getCompImpact();
-                        }
-                    } else if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
-                        if (t.frequency === 'one-time' || t.frequency === 'monthly') {
-                            // Budget mensili / una tantum: inclusi solo se futuri rispetto ad oggi
-                            const occurrenceDateStr = getTxOccurrenceDate(t, ym.year, ym.month);
-                            if (occurrenceDateStr > todayStr) {
-                                includeInFore = true;
-                                foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'cassa');
-                            }
+                const sortedTxList = Object.values(catData.transactions).sort((a, b) => {
+                    const dateCompare = b.tx.date.localeCompare(a.tx.date);
+                    if (dateCompare !== 0) return dateCompare;
+                    return a.tx.title.localeCompare(b.tx.title);
+                });
+                
+                sortedTxList.forEach(txObj => {
+                    const tx = txObj.tx;
+                    const txAmount = txObj.amount;
+                    
+                    const [yr, mo, dy] = tx.date.split('-').map(Number);
+                    const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
+                    
+                    const FREQ_MAP = {
+                        'one-time': 'Una Tantum',
+                        'monthly': 'Mensile',
+                        'bimonthly': 'Bimestrale',
+                        'quarterly': 'Trimestrale',
+                        'semiannual': 'Semestrale',
+                        'annual': 'Annuale'
+                    };
+                    
+                    let balanceColor = 'var(--text-primary)';
+                    let balanceText = '';
+                    if (tx.type === 'income') {
+                        if (txAmount > 0) {
+                            balanceColor = 'var(--success)';
+                            balanceText = '+' + formatTableCellValue(txAmount);
+                        } else if (txAmount < 0) {
+                            balanceColor = 'var(--danger)';
+                            balanceText = formatTableCellValue(txAmount);
                         } else {
-                            // Accantonamenti (frequenza > mensile): considerati sul 1° del mese, quindi sempre inclusi
-                            includeInFore = true;
-                            foreImpact = getMonthlyImpact(t, ym.year, ym.month, 'accantonamento');
+                            balanceText = formatTableCellValue(0);
+                        }
+                    } else { // expense
+                        if (txAmount > 0) {
+                            balanceColor = 'var(--danger)';
+                            balanceText = '-' + formatTableCellValue(txAmount);
+                        } else if (txAmount < 0) {
+                            balanceColor = 'var(--success)';
+                            balanceText = '+' + formatTableCellValue(Math.abs(txAmount));
+                        } else {
+                            balanceText = formatTableCellValue(0);
                         }
                     }
-                }
-                
-                if (includeInFore) {
-                    foreAmount += foreImpact;
-                }
-            }
+                    
+                    html += `
+                        <tr class="row-transaction hidden" data-metric="${metricKey}" data-category="${catId}">
+                            <td class="indent-transaction">
+                                <div class="transaction-name-wrapper">
+                                    <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
+                                    <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency}</span>
+                                </div>
+                            </td>
+                            <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">
+                                ${tx.type === 'income' ? formatTableCellValue(txAmount, true) : '-'}
+                            </td>
+                            <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">
+                                ${tx.type === 'expense' ? formatTableCellValue(txAmount, true) : '-'}
+                            </td>
+                            <td style="text-align: right; font-size: 0.85rem; font-weight: 500; color: ${balanceColor};">
+                                ${balanceText}
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
         });
         
-        if (prevAmount !== 0 || consAmount !== 0 || foreAmount !== 0) {
-            if (t.type === 'income') {
-                incomePrev += prevAmount;
-                incomePrevCash += prevCashAmount;
-                incomeCons += consAmount;
-                incomeFore += foreAmount;
-            } else {
-                expensePrev += prevAmount;
-                expensePrevCash += prevCashAmount;
-                expenseCons += consAmount;
-                expenseFore += foreAmount;
-            }
-            
-            if (!catTotals[t.categoryId]) {
-                catTotals[t.categoryId] = {
-                    prev: 0,
-                    prevCash: 0,
-                    cons: 0,
-                    fore: 0,
-                    type: t.type
-                };
-            }
-            catTotals[t.categoryId].prev += prevAmount;
-            catTotals[t.categoryId].prevCash += prevCashAmount;
-            catTotals[t.categoryId].cons += consAmount;
-            catTotals[t.categoryId].fore += foreAmount;
-        }
-    });
-
-    // Generate HTML for Category Details
-    const detailsExpenseDiv = document.getElementById('details-expense');
-    const detailsIncomeDiv = document.getElementById('details-income');
-    let expenseHtml = '';
-    let incomeHtml = '';
-
-    Object.keys(catTotals).forEach(catId => {
-        const cat = state.categories.find(c => c.id === catId);
-        if (!cat) return;
-        
-        const totals = catTotals[catId];
-        if (totals.prev === 0 && totals.prevCash === 0 && totals.cons === 0) return;
-
-        // Calcoli Competenza
-        const percentPrev = totals.prev > 0 ? (totals.cons / totals.prev) * 100 : 0;
-        const widthPrev = Math.min(percentPrev, 100);
-        let textStylePrev = '';
-        if (percentPrev > 100) {
-            textStylePrev = totals.type === 'expense' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
-        }
-
-        // Calcoli Cassa (Finanziario)
-        const percentCash = totals.prevCash > 0 ? (totals.cons / totals.prevCash) * 100 : 0;
-        const widthCash = Math.min(percentCash, 100);
-        const percentCashStr = totals.prevCash > 0 ? `${percentCash.toFixed(1)}%` : '-';
-        let textStyleCash = '';
-        if (totals.prevCash > 0 && percentCash > 100) {
-            textStyleCash = totals.type === 'expense' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
-        }
-
-        const html = `
-            <div class="cat-progress-item">
-                <div class="cat-progress-header">
-                    <div class="cat-progress-name">
-                        <i class="${cat.icon}" style="color: ${cat.color}"></i> ${cat.name}
-                    </div>
-                </div>
-                
-                <!-- Competenza (Spalmato) -->
-                <div class="cat-progress-sub-header">
-                    <span>Competenza:</span>
-                    <span style="${textStylePrev}">€${totals.cons.toFixed(2)} / €${totals.prev.toFixed(2)} (${percentPrev.toFixed(1)}%)</span>
-                </div>
-                <div class="cat-progress-bar-bg">
-                    <div class="cat-progress-bar" style="width: ${widthPrev}%; background-color: ${cat.color}"></div>
-                </div>
-                
-                <!-- Cassa (Finanziario) -->
-                <div class="cat-progress-sub-header">
-                    <span>Cassa (Finanz.):</span>
-                    <span style="${textStyleCash}">€${totals.cons.toFixed(2)} / €${totals.prevCash.toFixed(2)} (${percentCashStr})</span>
-                </div>
-                <div class="cat-progress-bar-bg">
-                    <div class="cat-progress-bar" style="width: ${widthCash}%; background-color: var(--text-secondary); opacity: 0.6;"></div>
-                </div>
-            </div>
-        `;
-
-        if (totals.type === 'expense') {
-            expenseHtml += html;
-        } else {
-            incomeHtml += html;
-        }
-    });
-
-    if (expenseHtml === '') expenseHtml = '<div style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">Nessun dato per questo periodo</div>';
-    if (incomeHtml === '') incomeHtml = '<div style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">Nessun dato per questo periodo</div>';
-
-    if (detailsExpenseDiv) detailsExpenseDiv.innerHTML = expenseHtml;
-    if (detailsIncomeDiv) detailsIncomeDiv.innerHTML = incomeHtml;
-
-    // Update DOM safely
-    const setElText = (id, text) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = text;
-    };
-    const setElWidth = (id, width) => {
-        const el = document.getElementById(id);
-        if (el) el.style.width = width;
-    };
-
-    setElText('dash-income-prev', `€ ${incomePrev.toFixed(2)}`);
-    setElText('dash-income-cons', `€ ${incomeCons.toFixed(2)}`);
-    setElText('dash-income-fore', `€ ${incomeFore.toFixed(2)}`);
-    
-    setElText('dash-expense-prev', `€ ${expensePrev.toFixed(2)}`);
-    setElText('dash-expense-cons', `€ ${expenseCons.toFixed(2)}`);
-    setElText('dash-expense-fore', `€ ${expenseFore.toFixed(2)}`);
-    
-    const balancePrev = incomePrev - expensePrev;
-    const balanceCons = incomeCons - expenseCons;
-    const balanceFore = incomeFore - expenseFore;
-
-    setElText('dash-balance-prev', `€ ${balancePrev.toFixed(2)}`);
-    setElText('dash-balance-cons', `€ ${balanceCons.toFixed(2)}`);
-    
-    const balanceForeEl = document.getElementById('dash-balance-fore');
-    if (balanceForeEl) {
-        balanceForeEl.textContent = `€ ${balanceFore.toFixed(2)}`;
-        if (balanceFore >= 0) {
-            balanceForeEl.style.color = 'var(--success)';
-        } else {
-            balanceForeEl.style.color = 'var(--danger)';
-        }
-    }
-
-    // Progress Bars - Allow percentages over 100%
-    const expenseTruePercent = expensePrev > 0 ? (expenseCons / expensePrev) * 100 : 0;
-    const incomeTruePercent = incomePrev > 0 ? (incomeCons / incomePrev) * 100 : 0;
-    const expenseCashTruePercent = expensePrevCash > 0 ? (expenseCons / expensePrevCash) * 100 : 0;
-    const incomeCashTruePercent = incomePrevCash > 0 ? (incomeCons / incomePrevCash) * 100 : 0;
-
-    // Cap visual width at 100% to prevent CSS overflow
-    const expenseWidth = Math.min(expenseTruePercent, 100);
-    const incomeWidth = Math.min(incomeTruePercent, 100);
-    const expenseCashWidth = Math.min(expenseCashTruePercent, 100);
-    const incomeCashWidth = Math.min(incomeCashTruePercent, 100);
-
-    // Update Competenza elements (Expense)
-    setElWidth('progress-expense', `${expenseWidth}%`);
-    const expText = document.getElementById('progress-expense-text');
-    if (expText) {
-        expText.textContent = `${expenseTruePercent.toFixed(1)}%`;
-        if (expenseTruePercent > 100) {
-            expText.style.color = 'var(--danger)';
-            expText.style.fontWeight = 'bold';
-        } else {
-            expText.style.color = '';
-            expText.style.fontWeight = '';
-        }
-    }
-
-    // Update Cassa elements (Expense)
-    setElWidth('progress-expense-cash', `${expenseCashWidth}%`);
-    const expCashText = document.getElementById('progress-expense-cash-text');
-    if (expCashText) {
-        expCashText.textContent = expensePrevCash > 0 ? `${expenseCashTruePercent.toFixed(1)}%` : '-';
-        if (expensePrevCash > 0 && expenseCashTruePercent > 100) {
-            expCashText.style.color = 'var(--danger)';
-            expCashText.style.fontWeight = 'bold';
-        } else {
-            expCashText.style.color = '';
-            expCashText.style.fontWeight = '';
-        }
-    }
-
-    // Update Competenza elements (Income)
-    setElWidth('progress-income', `${incomeWidth}%`);
-    const incText = document.getElementById('progress-income-text');
-    if (incText) {
-        incText.textContent = `${incomeTruePercent.toFixed(1)}%`;
-        if (incomeTruePercent > 100) {
-            incText.style.color = 'var(--success)';
-            incText.style.fontWeight = 'bold';
-        } else {
-            incText.style.color = '';
-            incText.style.fontWeight = '';
-        }
-    }
-
-    // Update Cassa elements (Income)
-    setElWidth('progress-income-cash', `${incomeCashWidth}%`);
-    const incCashText = document.getElementById('progress-income-cash-text');
-    if (incCashText) {
-        incCashText.textContent = incomePrevCash > 0 ? `${incomeCashTruePercent.toFixed(1)}%` : '-';
-        if (incomePrevCash > 0 && incomeCashTruePercent > 100) {
-            incCashText.style.color = 'var(--success)';
-            incCashText.style.fontWeight = 'bold';
-        } else {
-            incCashText.style.color = '';
-            incCashText.style.fontWeight = '';
-        }
+        tbody.innerHTML = html;
     }
 
     updateAnnualChart();
