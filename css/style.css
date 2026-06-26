@@ -660,6 +660,54 @@ input[type="color"] {
     margin-top: 2rem;
 }
 
+/* Custom Checkbox/Toggle Switch */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-container input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.2rem;
+    height: 1.2rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: background-color 0.2s, border-color 0.2s;
+    margin-right: 0.5rem;
+}
+
+.checkbox-container input[type="checkbox"]:checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.checkbox-container input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    top: 2px;
+    left: 6px;
+}
+
+.checkbox-container span {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
 /* Settings */
 .settings-panel {
     padding: 2rem;
