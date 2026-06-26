@@ -84,41 +84,21 @@
                     </div>
                 </div>
 
-                <!-- Summary Cards -->
-                <div class="summary-cards">
-                    <div class="card glass-panel card-income">
-                        <div class="card-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
-                        <div class="card-info">
-                            <h3>Entrate</h3>
-                            <div class="amounts">
-                                <p class="forecast">Forecast: <span id="dash-income-fore">€ 0.00</span></p>
-                                <p class="preventivo">Budget: <span id="dash-income-prev">€ 0.00</span></p>
-                                <p class="consuntivo">Reale: <span id="dash-income-cons">€ 0.00</span></p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card glass-panel card-expense">
-                        <div class="card-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
-                        <div class="card-info">
-                            <h3>Uscite</h3>
-                            <div class="amounts">
-                                <p class="forecast">Forecast: <span id="dash-expense-fore">€ 0.00</span></p>
-                                <p class="preventivo">Budget: <span id="dash-expense-prev">€ 0.00</span></p>
-                                <p class="consuntivo">Reale: <span id="dash-expense-cons">€ 0.00</span></p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card glass-panel card-balance">
-                        <div class="card-icon"><i class="fa-solid fa-scale-balanced"></i></div>
-                        <div class="card-info">
-                            <h3>Bilancio</h3>
-                            <div class="amounts">
-                                <p class="forecast">Forecast: <span id="dash-balance-fore">€ 0.00</span></p>
-                                <p class="preventivo">Budget: <span id="dash-balance-prev">€ 0.00</span></p>
-                                <p class="consuntivo">Reale: <span id="dash-balance-cons">€ 0.00</span></p>
-                            </div>
-                        </div>
-                    </div>
+                <!-- Summary Table (Espandibile) -->
+                <div class="summary-table-container glass-panel" style="margin-top: 1rem; padding: 1.5rem; overflow-x: auto; margin-bottom: 2rem;">
+                    <table class="summary-dashboard-table" style="width: 100%; border-collapse: collapse; min-width: 600px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--panel-border); font-size: 0.95rem;">
+                                <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-secondary);">Metrica / Categoria / Movimento</th>
+                                <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--success); width: 150px;">Entrate</th>
+                                <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--danger); width: 150px;">Uscite</th>
+                                <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-primary); width: 150px;">Bilancio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboard-table-body">
+                            <!-- Popolato dinamicamente da JS -->
+                        </tbody>
+                    </table>
                 </div>
 
                 <!-- Sezioni della Dashboard disabilitate temporaneamente per rebuild -->
