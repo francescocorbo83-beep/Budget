@@ -322,13 +322,15 @@ function initUI() {
             if (!tr) return;
 
             if (tr.classList.contains('row-metric')) {
-                const metric = tr.getAttribute('data-metric');
+                const voice = tr.getAttribute('data-voice');
+                if (voice === 'balance') return; // Il bilancio non si espande!
+                
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
                 
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
-                const catRows = tableBody.querySelectorAll(`.row-category[data-metric="${metric}"]`);
-                const txRows = tableBody.querySelectorAll(`.row-transaction[data-metric="${metric}"]`);
+                const catRows = tableBody.querySelectorAll(`.row-category[data-voice="${voice}"]`);
+                const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"]`);
                 
                 if (!isExpanded) {
                     // Expand: show categories
@@ -338,24 +340,24 @@ function initUI() {
                         const catId = row.getAttribute('data-category');
                         const catExpanded = row.getAttribute('data-expanded') === 'true';
                         if (catExpanded) {
-                            const catTxRows = tableBody.querySelectorAll(`.row-transaction[data-metric="${metric}"][data-category="${catId}"]`);
+                            const catTxRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${catId}"]`);
                             catTxRows.forEach(txRow => txRow.classList.remove('hidden'));
                         }
                     });
                 } else {
-                    // Collapse: hide all category and transaction rows under this metric
+                    // Collapse: hide all category and transaction rows under this voice
                     catRows.forEach(row => row.classList.add('hidden'));
                     txRows.forEach(row => row.classList.add('hidden'));
                 }
             } 
             else if (tr.classList.contains('row-category')) {
-                const metric = tr.getAttribute('data-metric');
+                const voice = tr.getAttribute('data-voice');
                 const category = tr.getAttribute('data-category');
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
                 
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
-                const txRows = tableBody.querySelectorAll(`.row-transaction[data-metric="${metric}"][data-category="${category}"]`);
+                const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${category}"]`);
                 
                 if (!isExpanded) {
                     txRows.forEach(row => row.classList.remove('hidden'));
@@ -957,197 +959,284 @@ function updateDashboard() {
     const isFin = (state.activeDashboardView || 'financial') === 'financial';
 
     const tree = {
-        forecast: { name: 'Forecast', entrate: 0, uscite: 0, categories: {} },
-        budget: { name: 'Budget', entrate: 0, uscite: 0, categories: {} },
-        reale: { name: 'Reale', entrate: 0, uscite: 0, categories: {} }
+        income: { name: 'Entrate', reale: 0, forecast: 0, budget: 0, categories: {} },
+        expense: { name: 'Uscite', reale: 0, forecast: 0, budget: 0, categories: {} }
     };
 
-    function addToTree(metricKey, cat, tx, amount) {
-        const metric = tree[metricKey];
-        if (tx.type === 'income') {
-            metric.entrate += amount;
-        } else {
-            metric.uscite += amount;
-        }
+    function addToTree(type, cat, tx, vals) {
+        const root = tree[type];
+        root.reale += vals.realeVal;
+        root.forecast += vals.forecastVal;
+        root.budget += vals.budgetVal;
 
-        if (!metric.categories[cat.id]) {
-            metric.categories[cat.id] = {
+        if (!root.categories[cat.id]) {
+            root.categories[cat.id] = {
                 category: cat,
-                entrate: 0,
-                uscite: 0,
+                reale: 0,
+                forecast: 0,
+                budget: 0,
                 transactions: {}
             };
         }
 
-        const catData = metric.categories[cat.id];
-        if (tx.type === 'income') {
-            catData.entrate += amount;
-        } else {
-            catData.uscite += amount;
-        }
+        const catData = root.categories[cat.id];
+        catData.reale += vals.realeVal;
+        catData.forecast += vals.forecastVal;
+        catData.budget += vals.budgetVal;
 
         if (!catData.transactions[tx.id]) {
             catData.transactions[tx.id] = {
                 tx: tx,
-                amount: 0
+                reale: 0,
+                forecast: 0,
+                budget: 0
             };
         }
-        catData.transactions[tx.id].amount += amount;
+        const txData = catData.transactions[tx.id];
+        txData.reale += vals.realeVal;
+        txData.forecast += vals.forecastVal;
+        txData.budget += vals.budgetVal;
     }
 
     state.transactions.forEach(t => {
         const cat = state.categories.find(c => c.id === t.categoryId) || { id: t.categoryId, name: 'N/D', color: '#ccc', icon: 'fa-solid fa-tag' };
 
-        let txReale = 0;
-        let txBudget = 0;
-        let txForecast = 0;
+        let sumReale = 0;
+        let sumBudget = 0;
+        let sumForecast = 0;
 
         targetMonths.forEach(ym => {
             const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-            txReale += vals.realeVal;
-            txBudget += vals.budgetVal;
-            txForecast += vals.forecastVal;
+            sumReale += vals.realeVal;
+            sumBudget += vals.budgetVal;
+            sumForecast += vals.forecastVal;
         });
 
-        if (Math.abs(txReale) > 0.0001) {
-            addToTree('reale', cat, t, txReale);
-        }
-        if (Math.abs(txBudget) > 0.0001) {
-            addToTree('budget', cat, t, txBudget);
-        }
-        if (Math.abs(txForecast) > 0.0001) {
-            addToTree('forecast', cat, t, txForecast);
+        if (Math.abs(sumReale) > 0.0001 || Math.abs(sumBudget) > 0.0001 || Math.abs(sumForecast) > 0.0001) {
+            addToTree(t.type, cat, t, { realeVal: sumReale, budgetVal: sumBudget, forecastVal: sumForecast });
         }
     });
 
     const tbody = document.getElementById('dashboard-table-body');
     if (tbody) {
         let html = '';
-        const metrics = ['forecast', 'budget', 'reale'];
         
-        metrics.forEach(metricKey => {
-            const metric = tree[metricKey];
-            const metricBalance = metric.entrate - metric.uscite;
-            
+        function getComparisonCells(reale, forecast, budget, type) {
+            const r_b = reale - budget;
+            const r_f = reale - forecast;
+            const f_b = forecast - budget;
+
+            let color_rb = 'var(--text-secondary)';
+            let text_rb = formatTableCellValue(r_b);
+            if (Math.abs(r_b) >= 0.005) {
+                if (type === 'expense') {
+                    color_rb = r_b > 0 ? 'var(--danger)' : 'var(--success)';
+                    text_rb = (r_b > 0 ? '+' : '') + formatTableCellValue(r_b);
+                } else {
+                    color_rb = r_b > 0 ? 'var(--success)' : 'var(--danger)';
+                    text_rb = (r_b > 0 ? '+' : '') + formatTableCellValue(r_b);
+                }
+            }
+
+            let color_rf = 'var(--text-secondary)';
+            let text_rf = formatTableCellValue(r_f);
+            if (Math.abs(r_f) >= 0.005) {
+                if (type === 'expense') {
+                    color_rf = r_f > 0 ? 'var(--danger)' : 'var(--success)';
+                    text_rf = (r_f > 0 ? '+' : '') + formatTableCellValue(r_f);
+                } else {
+                    color_rf = r_f > 0 ? 'var(--success)' : 'var(--danger)';
+                    text_rf = (r_f > 0 ? '+' : '') + formatTableCellValue(r_f);
+                }
+            }
+
+            let color_fb = 'var(--text-secondary)';
+            let text_fb = formatTableCellValue(f_b);
+            if (Math.abs(f_b) >= 0.005) {
+                if (type === 'expense') {
+                    color_fb = f_b > 0 ? 'var(--danger)' : 'var(--success)';
+                    text_fb = (f_b > 0 ? '+' : '') + formatTableCellValue(f_b);
+                } else {
+                    color_fb = f_b > 0 ? 'var(--success)' : 'var(--danger)';
+                    text_fb = (f_b > 0 ? '+' : '') + formatTableCellValue(f_b);
+                }
+            }
+
+            return `
+                <td style="text-align: right; font-weight: 500; color: ${color_rb};">${text_rb}</td>
+                <td style="text-align: right; font-weight: 500; color: ${color_rf};">${text_rf}</td>
+                <td style="text-align: right; font-weight: 500; color: ${color_fb};">${text_fb}</td>
+            `;
+        }
+
+        // 1. Rendering di ENTRATE
+        const inc = tree.income;
+        html += `
+            <tr class="row-metric" data-voice="income" data-expanded="false">
+                <td style="padding-left: 1rem;">
+                    <i class="fa-solid fa-chevron-right chevron-icon" style="color: var(--text-secondary);"></i>
+                    <strong>${inc.name}</strong>
+                </td>
+                <td style="text-align: right; color: var(--success); font-weight: 600;">${formatTableCellValue(inc.reale)}</td>
+                <td style="text-align: right; color: var(--success); font-weight: 600;">${formatTableCellValue(inc.forecast)}</td>
+                <td style="text-align: right; color: var(--success); font-weight: 600;">${formatTableCellValue(inc.budget)}</td>
+                ${getComparisonCells(inc.reale, inc.forecast, inc.budget, 'income')}
+            </tr>
+        `;
+
+        const sortedIncCats = Object.keys(inc.categories).sort((a, b) => {
+            return inc.categories[a].category.name.toLowerCase().localeCompare(inc.categories[b].category.name.toLowerCase());
+        });
+
+        sortedIncCats.forEach(catId => {
+            const catData = inc.categories[catId];
+            const cat = catData.category;
             html += `
-                <tr class="row-metric" data-metric="${metricKey}" data-expanded="false">
-                    <td style="padding-left: 1rem;">
-                        <i class="fa-solid fa-chevron-right chevron-icon" style="color: var(--text-secondary);"></i>
-                        <strong>${metric.name}</strong>
+                <tr class="row-category hidden" data-voice="income" data-category="${catId}" data-expanded="false">
+                    <td class="indent-category">
+                        <div class="category-name-wrapper">
+                            <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.8rem; color: var(--text-secondary);"></i>
+                            <i class="${cat.icon}" style="color: ${cat.color}; width: 16px; text-align: center;"></i>
+                            <span>${cat.name}</span>
+                        </div>
                     </td>
-                    <td style="text-align: right; color: var(--success); font-weight: 600;">
-                        ${formatTableCellValue(metric.entrate)}
-                    </td>
-                    <td style="text-align: right; color: var(--danger); font-weight: 600;">
-                        ${formatTableCellValue(metric.uscite)}
-                    </td>
-                    <td style="text-align: right; font-weight: 600; color: ${metricBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">
-                        ${formatTableCellValue(metricBalance)}
-                    </td>
+                    <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">${formatTableCellValue(catData.reale, true)}</td>
+                    <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">${formatTableCellValue(catData.forecast, true)}</td>
+                    <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">${formatTableCellValue(catData.budget, true)}</td>
+                    ${getComparisonCells(catData.reale, catData.forecast, catData.budget, 'income')}
                 </tr>
             `;
-            
-            const sortedCatIds = Object.keys(metric.categories).sort((a, b) => {
-                const nameA = metric.categories[a].category.name.toLowerCase();
-                const nameB = metric.categories[b].category.name.toLowerCase();
-                return nameA.localeCompare(nameB);
+
+            const sortedIncTxs = Object.values(catData.transactions).sort((a, b) => {
+                const dateCompare = b.tx.date.localeCompare(a.tx.date);
+                if (dateCompare !== 0) return dateCompare;
+                return a.tx.title.localeCompare(b.tx.title);
             });
-            
-            sortedCatIds.forEach(catId => {
-                const catData = metric.categories[catId];
-                const cat = catData.category;
-                const catBalance = catData.entrate - catData.uscite;
+
+            sortedIncTxs.forEach(tObj => {
+                const tx = tObj.tx;
+                const [yr, mo, dy] = tx.date.split('-').map(Number);
+                const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
                 
+                const FREQ_MAP = {
+                    'one-time': 'Una Tantum',
+                    'monthly': 'Mensile',
+                    'bimonthly': 'Bimestrale',
+                    'quarterly': 'Trimestrale',
+                    'semiannual': 'Semestrale',
+                    'annual': 'Annuale'
+                };
+
                 html += `
-                    <tr class="row-category hidden" data-metric="${metricKey}" data-category="${catId}" data-expanded="false">
-                        <td class="indent-category">
-                            <div class="category-name-wrapper">
-                                <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.8rem; color: var(--text-secondary);"></i>
-                                <i class="${cat.icon}" style="color: ${cat.color}; width: 16px; text-align: center;"></i>
-                                <span>${cat.name}</span>
+                    <tr class="row-transaction hidden" data-voice="income" data-category="${catId}">
+                        <td class="indent-transaction">
+                            <div class="transaction-name-wrapper">
+                                <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
+                                <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency}</span>
                             </div>
                         </td>
-                        <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">
-                            ${formatTableCellValue(catData.entrate, true)}
-                        </td>
-                        <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">
-                            ${formatTableCellValue(catData.uscite, true)}
-                        </td>
-                        <td style="text-align: right; font-weight: 500; font-size: 0.9rem; color: ${catBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">
-                            ${formatTableCellValue(catBalance)}
-                        </td>
+                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.reale, true)}</td>
+                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.forecast, true)}</td>
+                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.budget, true)}</td>
+                        ${getComparisonCells(tObj.reale, tObj.forecast, tObj.budget, 'income')}
                     </tr>
                 `;
-                
-                const sortedTxList = Object.values(catData.transactions).sort((a, b) => {
-                    const dateCompare = b.tx.date.localeCompare(a.tx.date);
-                    if (dateCompare !== 0) return dateCompare;
-                    return a.tx.title.localeCompare(b.tx.title);
-                });
-                
-                sortedTxList.forEach(txObj => {
-                    const tx = txObj.tx;
-                    const txAmount = txObj.amount;
-                    
-                    const [yr, mo, dy] = tx.date.split('-').map(Number);
-                    const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
-                    
-                    const FREQ_MAP = {
-                        'one-time': 'Una Tantum',
-                        'monthly': 'Mensile',
-                        'bimonthly': 'Bimestrale',
-                        'quarterly': 'Trimestrale',
-                        'semiannual': 'Semestrale',
-                        'annual': 'Annuale'
-                    };
-                    
-                    let balanceColor = 'var(--text-primary)';
-                    let balanceText = '';
-                    if (tx.type === 'income') {
-                        if (txAmount > 0) {
-                            balanceColor = 'var(--success)';
-                            balanceText = '+' + formatTableCellValue(txAmount);
-                        } else if (txAmount < 0) {
-                            balanceColor = 'var(--danger)';
-                            balanceText = formatTableCellValue(txAmount);
-                        } else {
-                            balanceText = formatTableCellValue(0);
-                        }
-                    } else { // expense
-                        if (txAmount > 0) {
-                            balanceColor = 'var(--danger)';
-                            balanceText = '-' + formatTableCellValue(txAmount);
-                        } else if (txAmount < 0) {
-                            balanceColor = 'var(--success)';
-                            balanceText = '+' + formatTableCellValue(Math.abs(txAmount));
-                        } else {
-                            balanceText = formatTableCellValue(0);
-                        }
-                    }
-                    
-                    html += `
-                        <tr class="row-transaction hidden" data-metric="${metricKey}" data-category="${catId}">
-                            <td class="indent-transaction">
-                                <div class="transaction-name-wrapper">
-                                    <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
-                                    <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency}</span>
-                                </div>
-                            </td>
-                            <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">
-                                ${tx.type === 'income' ? formatTableCellValue(txAmount, true) : '-'}
-                            </td>
-                            <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">
-                                ${tx.type === 'expense' ? formatTableCellValue(txAmount, true) : '-'}
-                            </td>
-                            <td style="text-align: right; font-size: 0.85rem; font-weight: 500; color: ${balanceColor};">
-                                ${balanceText}
-                            </td>
-                        </tr>
-                    `;
-                });
             });
         });
-        
+
+        // 2. Rendering di USCITE
+        const exp = tree.expense;
+        html += `
+            <tr class="row-metric" data-voice="expense" data-expanded="false" style="border-top: 2px solid var(--panel-border);">
+                <td style="padding-left: 1rem;">
+                    <i class="fa-solid fa-chevron-right chevron-icon" style="color: var(--text-secondary);"></i>
+                    <strong>${exp.name}</strong>
+                </td>
+                <td style="text-align: right; color: var(--danger); font-weight: 600;">${formatTableCellValue(exp.reale)}</td>
+                <td style="text-align: right; color: var(--danger); font-weight: 600;">${formatTableCellValue(exp.forecast)}</td>
+                <td style="text-align: right; color: var(--danger); font-weight: 600;">${formatTableCellValue(exp.budget)}</td>
+                ${getComparisonCells(exp.reale, exp.forecast, exp.budget, 'expense')}
+            </tr>
+        `;
+
+        const sortedExpCats = Object.keys(exp.categories).sort((a, b) => {
+            return exp.categories[a].category.name.toLowerCase().localeCompare(exp.categories[b].category.name.toLowerCase());
+        });
+
+        sortedExpCats.forEach(catId => {
+            const catData = exp.categories[catId];
+            const cat = catData.category;
+            html += `
+                <tr class="row-category hidden" data-voice="expense" data-category="${catId}" data-expanded="false">
+                    <td class="indent-category">
+                        <div class="category-name-wrapper">
+                            <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.8rem; color: var(--text-secondary);"></i>
+                            <i class="${cat.icon}" style="color: ${cat.color}; width: 16px; text-align: center;"></i>
+                            <span>${cat.name}</span>
+                        </div>
+                    </td>
+                    <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">${formatTableCellValue(catData.reale, true)}</td>
+                    <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">${formatTableCellValue(catData.forecast, true)}</td>
+                    <td style="text-align: right; color: var(--text-primary); font-size: 0.9rem;">${formatTableCellValue(catData.budget, true)}</td>
+                    ${getComparisonCells(catData.reale, catData.forecast, catData.budget, 'expense')}
+                </tr>
+            `;
+
+            const sortedExpTxs = Object.values(catData.transactions).sort((a, b) => {
+                const dateCompare = b.tx.date.localeCompare(a.tx.date);
+                if (dateCompare !== 0) return dateCompare;
+                return a.tx.title.localeCompare(b.tx.title);
+            });
+
+            sortedExpTxs.forEach(tObj => {
+                const tx = tObj.tx;
+                const [yr, mo, dy] = tx.date.split('-').map(Number);
+                const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
+                
+                const FREQ_MAP = {
+                    'one-time': 'Una Tantum',
+                    'monthly': 'Mensile',
+                    'bimonthly': 'Bimestrale',
+                    'quarterly': 'Trimestrale',
+                    'semiannual': 'Semestrale',
+                    'annual': 'Annuale'
+                };
+
+                html += `
+                    <tr class="row-transaction hidden" data-voice="expense" data-category="${catId}">
+                        <td class="indent-transaction">
+                            <div class="transaction-name-wrapper">
+                                <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
+                                <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency}</span>
+                            </div>
+                        </td>
+                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.reale, true)}</td>
+                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.forecast, true)}</td>
+                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.budget, true)}</td>
+                        ${getComparisonCells(tObj.reale, tObj.forecast, tObj.budget, 'expense')}
+                    </tr>
+                `;
+            });
+        });
+
+        // 3. Rendering di BILANCIO
+        const balReale = inc.reale - exp.reale;
+        const balForecast = inc.forecast - exp.forecast;
+        const balBudget = inc.budget - exp.budget;
+
+        html += `
+            <tr class="row-metric" data-voice="balance" style="border-top: 2px solid var(--panel-border); background: rgba(255, 255, 255, 0.05); cursor: default;">
+                <td style="padding-left: 1rem;">
+                    <i class="fa-solid fa-scale-balanced" style="margin-right: 0.5rem; width: 14px; text-align: center; color: var(--text-primary);"></i>
+                    <strong>Bilancio</strong>
+                </td>
+                <td style="text-align: right; font-weight: 600; color: ${balReale >= 0 ? 'var(--success)' : 'var(--danger)'};">${formatTableCellValue(balReale)}</td>
+                <td style="text-align: right; font-weight: 600; color: ${balForecast >= 0 ? 'var(--success)' : 'var(--danger)'};">${formatTableCellValue(balForecast)}</td>
+                <td style="text-align: right; font-weight: 600; color: ${balBudget >= 0 ? 'var(--success)' : 'var(--danger)'};">${formatTableCellValue(balBudget)}</td>
+                ${getComparisonCells(balReale, balForecast, balBudget, 'balance')}
+            </tr>
+        `;
+
         tbody.innerHTML = html;
     }
 
