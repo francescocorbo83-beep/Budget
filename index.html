@@ -75,8 +75,16 @@
                     </div>
                 </div>
 
-                <!-- Sezioni della Dashboard disabilitate temporaneamente per rebuild -->
-                <!--
+                <!-- Selettore Vista Dashboard -->
+                <div class="view-selector-container glass-panel" style="margin-bottom: 2rem; padding: 1rem; display: flex; gap: 1rem; align-items: center; justify-content: flex-start; flex-wrap: wrap;">
+                    <span style="font-weight: 600; color: var(--text-secondary); font-size: 0.95rem;">Analisi Dashboard:</span>
+                    <div class="dashboard-tabs" style="display: flex; gap: 0.5rem; background: rgba(0, 0, 0, 0.2); padding: 0.25rem; border-radius: 8px; border: 1px solid var(--panel-border);">
+                        <button id="btn-view-financial" class="btn-dashboard-view active-view" style="padding: 0.5rem 1.2rem; font-size: 0.9rem; border-radius: 6px; border: none; cursor: pointer; transition: all 0.3s; background: var(--primary); color: white; font-weight: 600;">Finanziaria (Cassa)</button>
+                        <button id="btn-view-economic" class="btn-dashboard-view" style="padding: 0.5rem 1.2rem; font-size: 0.9rem; border-radius: 6px; border: none; cursor: pointer; transition: all 0.3s; background: transparent; color: var(--text-secondary); font-weight: 600;">Economica (Competenza)</button>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
                 <div class="summary-cards">
                     <div class="card glass-panel card-income">
                         <div class="card-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
@@ -113,6 +121,8 @@
                     </div>
                 </div>
 
+                <!-- Sezioni della Dashboard disabilitate temporaneamente per rebuild -->
+                <!--
                 <div class="charts-section glass-panel">
                     <h3>Avanzamento Consuntivo vs Preventivo (Uscite)</h3>
                     <div class="progress-container">
