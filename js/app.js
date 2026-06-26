@@ -963,7 +963,7 @@ function updateDashboard() {
         expense: { name: 'Uscite', reale: 0, forecast: 0, budget: 0, categories: {} }
     };
 
-    function addToTree(type, cat, tx, vals) {
+    function addToTree(type, cat, title, representativeTx, vals) {
         const root = tree[type];
         root.reale += vals.realeVal;
         root.forecast += vals.forecastVal;
@@ -984,36 +984,92 @@ function updateDashboard() {
         catData.forecast += vals.forecastVal;
         catData.budget += vals.budgetVal;
 
-        if (!catData.transactions[tx.id]) {
-            catData.transactions[tx.id] = {
-                tx: tx,
+        const key = title;
+        if (!catData.transactions[key]) {
+            catData.transactions[key] = {
+                tx: representativeTx,
+                title: title,
                 reale: 0,
                 forecast: 0,
                 budget: 0
             };
         }
-        const txData = catData.transactions[tx.id];
+        const txData = catData.transactions[key];
         txData.reale += vals.realeVal;
         txData.forecast += vals.forecastVal;
         txData.budget += vals.budgetVal;
     }
 
+    // Group transactions by categoryId and title
+    const groups = {};
     state.transactions.forEach(t => {
-        const cat = state.categories.find(c => c.id === t.categoryId) || { id: t.categoryId, name: 'N/D', color: '#ccc', icon: 'fa-solid fa-tag' };
+        const key = `${t.categoryId}_${t.title.trim()}`;
+        if (!groups[key]) {
+            groups[key] = {
+                categoryId: t.categoryId,
+                title: t.title.trim(),
+                transactions: []
+            };
+        }
+        groups[key].transactions.push(t);
+    });
 
-        let sumReale = 0;
-        let sumBudget = 0;
-        let sumForecast = 0;
+    Object.values(groups).forEach(group => {
+        const cat = state.categories.find(c => c.id === group.categoryId) || { id: group.categoryId, name: 'N/D', color: '#ccc', icon: 'fa-solid fa-tag' };
+        
+        let groupReale = 0;
+        let groupBudget = 0;
+        let groupForecast = 0;
 
         targetMonths.forEach(ym => {
-            const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-            sumReale += vals.realeVal;
-            sumBudget += vals.budgetVal;
-            sumForecast += vals.forecastVal;
+            let monthReale = 0;
+            let monthBudget = 0;
+            let monthForecast = 0;
+
+            group.transactions.forEach(t => {
+                const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+                monthReale += vals.realeVal;
+                monthBudget += vals.budgetVal;
+            });
+
+            // Calculate Forecast for this month:
+            // Check if there is any consuntivo transaction in the group with non-zero forecast impact in this month
+            let hasActiveConsuntivo = false;
+            let consuntivoForecastSum = 0;
+
+            group.transactions.forEach(t => {
+                if (t.nature === 'consuntivo') {
+                    const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+                    if (Math.abs(vals.forecastVal) > 0.0001) {
+                        hasActiveConsuntivo = true;
+                        consuntivoForecastSum += vals.forecastVal;
+                    }
+                }
+            });
+
+            if (hasActiveConsuntivo) {
+                monthForecast = consuntivoForecastSum;
+            } else {
+                let preventivoForecastSum = 0;
+                group.transactions.forEach(t => {
+                    if (t.nature !== 'consuntivo') {
+                        const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+                        preventivoForecastSum += vals.forecastVal;
+                    }
+                });
+                monthForecast = preventivoForecastSum;
+            }
+
+            groupReale += monthReale;
+            groupBudget += monthBudget;
+            groupForecast += monthForecast;
         });
 
-        if (Math.abs(sumReale) > 0.0001 || Math.abs(sumBudget) > 0.0001 || Math.abs(sumForecast) > 0.0001) {
-            addToTree(t.type, cat, t, { realeVal: sumReale, budgetVal: sumBudget, forecastVal: sumForecast });
+        if (Math.abs(groupReale) > 0.0001 || Math.abs(groupBudget) > 0.0001 || Math.abs(groupForecast) > 0.0001) {
+            const representativeTx = group.transactions.find(t => t.nature !== 'consuntivo') || group.transactions[0];
+            const type = representativeTx.type;
+
+            addToTree(type, cat, group.title, representativeTx, { realeVal: groupReale, budgetVal: groupBudget, forecastVal: groupForecast });
         }
     });
 
