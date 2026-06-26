@@ -31,6 +31,21 @@ function loadLocalData() {
         if (!state.activeDashboardView) {
             state.activeDashboardView = 'financial';
         }
+        
+        // Migrazione automatica per impostare repeatYearly: true su transazioni di budget ricorrenti esistenti
+        let migrated = false;
+        if (state.transactions) {
+            state.transactions = state.transactions.map(tx => {
+                if (tx.nature === 'preventivo' && tx.frequency !== 'one-time' && tx.repeatYearly === undefined) {
+                    tx.repeatYearly = true;
+                    migrated = true;
+                }
+                return tx;
+            });
+        }
+        if (migrated) {
+            saveLocalData();
+        }
     } else {
         state.categories = [...DEFAULT_CATEGORIES];
         saveLocalData();
@@ -138,8 +153,30 @@ function initUI() {
         populateCategorySelect();
         // Default date to today
         document.getElementById('tx-date').valueAsDate = new Date();
+        
+        // Gestione checkbox ripetizione annuale
+        const natureSelect = document.getElementById('tx-nature');
+        const repeatRow = document.getElementById('row-repeat-yearly');
+        if (repeatRow && natureSelect) {
+            repeatRow.classList.toggle('hidden', natureSelect.value !== 'preventivo');
+        }
+        const repeatCheck = document.getElementById('tx-repeat-yearly');
+        if (repeatCheck) {
+            repeatCheck.checked = false;
+        }
+        
         document.getElementById('modal-transaction').classList.remove('hidden');
     });
+
+    const natureSelectEl = document.getElementById('tx-nature');
+    if (natureSelectEl) {
+        natureSelectEl.addEventListener('change', (e) => {
+            const repeatRow = document.getElementById('row-repeat-yearly');
+            if (repeatRow) {
+                repeatRow.classList.toggle('hidden', e.target.value !== 'preventivo');
+            }
+        });
+    }
 
     document.getElementById('form-transaction').addEventListener('submit', handleTransactionSubmit);
 
@@ -406,7 +443,8 @@ function handleTransactionSubmit(e) {
         nature: document.getElementById('tx-nature').value,
         frequency: document.getElementById('tx-frequency').value,
         date: document.getElementById('tx-date').value,
-        categoryId: document.getElementById('tx-category').value
+        categoryId: document.getElementById('tx-category').value,
+        repeatYearly: document.getElementById('tx-repeat-yearly') ? document.getElementById('tx-repeat-yearly').checked : false
     };
 
     const existingIndex = state.transactions.findIndex(t => t.id === id);
@@ -516,6 +554,16 @@ function editTransaction(id) {
     
     populateCategorySelect();
     document.getElementById('tx-category').value = tx.categoryId;
+
+    // Popola lo stato del checkbox ripetizione annuale e mostralo se è di tipo preventivo
+    const repeatCheck = document.getElementById('tx-repeat-yearly');
+    if (repeatCheck) {
+        repeatCheck.checked = !!tx.repeatYearly;
+    }
+    const repeatRow = document.getElementById('row-repeat-yearly');
+    if (repeatRow) {
+        repeatRow.classList.toggle('hidden', tx.nature !== 'preventivo');
+    }
 
     document.getElementById('modal-tx-title').textContent = 'Modifica Transazione';
     document.getElementById('modal-transaction').classList.remove('hidden');
@@ -783,10 +831,24 @@ function getMonthlyImpact(tx, targetYear, targetMonth, calculationMode) {
         const absoluteStartMonth = absoluteTxMonth - (p - 1);
         const absoluteTargetMonth = targetYear * 12 + targetMonth;
 
-        if (absoluteTargetMonth >= absoluteStartMonth) {
-            return txAmount / p;
+        if (tx.repeatYearly) {
+            if (absoluteTargetMonth >= absoluteStartMonth) {
+                return txAmount / p;
+            }
+            return 0;
+        } else {
+            // Se non ripete ogni anno, limitiamo la competenza all'anno solare originale della transazione
+            let lastOccurrenceMonth = txMonth;
+            while (lastOccurrenceMonth + p <= 12) {
+                lastOccurrenceMonth += p;
+            }
+            const absoluteEndMonth = txYear * 12 + lastOccurrenceMonth;
+
+            if (absoluteTargetMonth >= absoluteStartMonth && absoluteTargetMonth <= absoluteEndMonth) {
+                return txAmount / p;
+            }
+            return 0;
         }
-        return 0;
     }
 
     function getCassaImpact() {
@@ -801,20 +863,38 @@ function getMonthlyImpact(tx, targetYear, targetMonth, calculationMode) {
             return 0;
         }
 
-        if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
-            return 0;
-        }
+        if (tx.repeatYearly) {
+            if (txYear > targetYear || (txYear === targetYear && txMonth > targetMonth)) {
+                return 0;
+            }
 
-        const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
-        let isHit = false;
-        
-        if (tx.frequency === 'monthly') isHit = true;
-        else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
-        else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
-        else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
-        else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
-        
-        return isHit ? txAmount : 0;
+            const monthDiff = (targetYear - txYear) * 12 + (targetMonth - txMonth);
+            let isHit = false;
+            
+            if (tx.frequency === 'monthly') isHit = true;
+            else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
+            else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
+            else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
+            else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
+            
+            return isHit ? txAmount : 0;
+        } else {
+            // Se non ripete ogni anno, limitiamo l'impatto di cassa all'anno solare originale
+            if (targetYear !== txYear || targetMonth < txMonth) {
+                return 0;
+            }
+
+            const monthDiff = targetMonth - txMonth;
+            let isHit = false;
+            
+            if (tx.frequency === 'monthly') isHit = true;
+            else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
+            else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
+            else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
+            else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
+            
+            return isHit ? txAmount : 0;
+        }
     }
 
     return getCassaImpact();
