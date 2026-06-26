@@ -532,6 +532,7 @@ tbody tr:hover {
 .badge-expense { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
 .badge-prev { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
 .badge-cons { background: rgba(99, 102, 241, 0.2); color: var(--primary); }
+.badge-acc { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
 .badge-cat { background: rgba(255, 255, 255, 0.1); color: white; display: inline-flex; align-items: center; gap: 0.5rem; }
 
 /* Categories Grid */
