@@ -151,8 +151,16 @@ function initUI() {
         document.getElementById('tx-id').value = '';
         document.getElementById('modal-tx-title').textContent = 'Nuova Transazione';
         populateCategorySelect();
+        populateBudgetGroupsDatalist();
+        
         // Default date to today
         document.getElementById('tx-date').valueAsDate = new Date();
+        
+        // Reset gruppo di budget
+        const budgetGroupInput = document.getElementById('tx-budget-group');
+        if (budgetGroupInput) {
+            budgetGroupInput.value = '';
+        }
         
         // Gestione checkbox ripetizione annuale
         const natureSelect = document.getElementById('tx-nature');
@@ -363,27 +371,39 @@ function initUI() {
                 if (voice === 'balance') return; // Il bilancio non si espande!
                 
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
-                
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
                 const catRows = tableBody.querySelectorAll(`.row-category[data-voice="${voice}"]`);
+                const groupRows = tableBody.querySelectorAll(`.row-group[data-voice="${voice}"]`);
                 const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"]`);
                 
                 if (!isExpanded) {
-                    // Expand: show categories
+                    // Expand Level 1: show categories
                     catRows.forEach(row => {
                         row.classList.remove('hidden');
-                        // If category was previously expanded, show its transactions too
+                        
+                        // If category is also expanded, show its groups
                         const catId = row.getAttribute('data-category');
                         const catExpanded = row.getAttribute('data-expanded') === 'true';
                         if (catExpanded) {
-                            const catTxRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${catId}"]`);
-                            catTxRows.forEach(txRow => txRow.classList.remove('hidden'));
+                            const catGroupRows = tableBody.querySelectorAll(`.row-group[data-voice="${voice}"][data-category="${catId}"]`);
+                            catGroupRows.forEach(gRow => {
+                                gRow.classList.remove('hidden');
+                                
+                                // If group is also expanded, show its transactions
+                                const groupId = gRow.getAttribute('data-group');
+                                const groupExpanded = gRow.getAttribute('data-expanded') === 'true';
+                                if (groupExpanded) {
+                                    const gTxRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${catId}"][data-group="${groupId}"]`);
+                                    gTxRows.forEach(txRow => txRow.classList.remove('hidden'));
+                                }
+                            });
                         }
                     });
                 } else {
-                    // Collapse: hide all category and transaction rows under this voice
+                    // Collapse Level 1: hide all category, group, and transaction rows under this voice
                     catRows.forEach(row => row.classList.add('hidden'));
+                    groupRows.forEach(row => row.classList.add('hidden'));
                     txRows.forEach(row => row.classList.add('hidden'));
                 }
             } 
@@ -391,10 +411,38 @@ function initUI() {
                 const voice = tr.getAttribute('data-voice');
                 const category = tr.getAttribute('data-category');
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
-                
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
+                const groupRows = tableBody.querySelectorAll(`.row-group[data-voice="${voice}"][data-category="${category}"]`);
                 const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${category}"]`);
+                
+                if (!isExpanded) {
+                    // Expand Level 2: show groups
+                    groupRows.forEach(row => {
+                        row.classList.remove('hidden');
+                        
+                        // If group is also expanded, show its transactions
+                        const groupId = row.getAttribute('data-group');
+                        const groupExpanded = row.getAttribute('data-expanded') === 'true';
+                        if (groupExpanded) {
+                            const gTxRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${category}"][data-group="${groupId}"]`);
+                            gTxRows.forEach(txRow => txRow.classList.remove('hidden'));
+                        }
+                    });
+                } else {
+                    // Collapse Level 2: hide groups and transactions
+                    groupRows.forEach(row => row.classList.add('hidden'));
+                    txRows.forEach(row => row.classList.add('hidden'));
+                }
+            }
+            else if (tr.classList.contains('row-group')) {
+                const voice = tr.getAttribute('data-voice');
+                const category = tr.getAttribute('data-category');
+                const group = tr.getAttribute('data-group');
+                const isExpanded = tr.getAttribute('data-expanded') === 'true';
+                tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
+                
+                const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${category}"][data-group="${group}"]`);
                 
                 if (!isExpanded) {
                     txRows.forEach(row => row.classList.remove('hidden'));
@@ -444,7 +492,8 @@ function handleTransactionSubmit(e) {
         frequency: document.getElementById('tx-frequency').value,
         date: document.getElementById('tx-date').value,
         categoryId: document.getElementById('tx-category').value,
-        repeatYearly: document.getElementById('tx-repeat-yearly') ? document.getElementById('tx-repeat-yearly').checked : false
+        repeatYearly: document.getElementById('tx-repeat-yearly') ? document.getElementById('tx-repeat-yearly').checked : false,
+        budgetGroup: document.getElementById('tx-budget-group') ? document.getElementById('tx-budget-group').value.trim() : ''
     };
 
     const existingIndex = state.transactions.findIndex(t => t.id === id);
@@ -553,7 +602,14 @@ function editTransaction(id) {
     document.getElementById('tx-date').value = tx.date;
     
     populateCategorySelect();
+    populateBudgetGroupsDatalist();
     document.getElementById('tx-category').value = tx.categoryId;
+
+    // Popola il campo del gruppo di budget
+    const budgetGroupInput = document.getElementById('tx-budget-group');
+    if (budgetGroupInput) {
+        budgetGroupInput.value = tx.budgetGroup || '';
+    }
 
     // Popola lo stato del checkbox ripetizione annuale e mostralo se è di tipo preventivo
     const repeatCheck = document.getElementById('tx-repeat-yearly');
@@ -722,6 +778,31 @@ function populateCategorySelect() {
     
     if (chartSelect) chartSelect.value = currentChartFilter;
     if (tableSelect) tableSelect.value = currentTableFilter;
+}
+
+function populateBudgetGroupsDatalist() {
+    const datalist = document.getElementById('budget-groups-list');
+    if (!datalist) return;
+    
+    datalist.innerHTML = '';
+    
+    // Raccoglie tutti i gruppi budget e titoli dei preventivi/accantonamenti
+    const groups = new Set();
+    state.transactions.forEach(t => {
+        if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
+            if (t.budgetGroup && t.budgetGroup.trim() !== '') {
+                groups.add(t.budgetGroup.trim());
+            } else if (t.title && t.title.trim() !== '') {
+                groups.add(t.title.trim());
+            }
+        }
+    });
+    
+    groups.forEach(gName => {
+        const option = document.createElement('option');
+        option.value = gName;
+        datalist.appendChild(option);
+    });
 }
 
 function handleCategorySubmit(e) {
@@ -1043,7 +1124,7 @@ function updateDashboard() {
         expense: { name: 'Uscite', reale: 0, forecast: 0, budget: 0, categories: {} }
     };
 
-    function addToTree(type, cat, title, representativeTx, vals) {
+    function addToTree(type, cat, groupName, representativeTx, vals, groupTxs) {
         const root = tree[type];
         root.reale += vals.realeVal;
         root.forecast += vals.forecastVal;
@@ -1055,7 +1136,7 @@ function updateDashboard() {
                 reale: 0,
                 forecast: 0,
                 budget: 0,
-                transactions: {}
+                groups: {}
             };
         }
 
@@ -1064,30 +1145,34 @@ function updateDashboard() {
         catData.forecast += vals.forecastVal;
         catData.budget += vals.budgetVal;
 
-        const key = title;
-        if (!catData.transactions[key]) {
-            catData.transactions[key] = {
-                tx: representativeTx,
-                title: title,
-                reale: 0,
-                forecast: 0,
-                budget: 0
+        const key = groupName;
+        if (!catData.groups[key]) {
+            catData.groups[key] = {
+                groupName: groupName,
+                reale: vals.realeVal,
+                forecast: vals.forecastVal,
+                budget: vals.budgetVal,
+                representativeTx: representativeTx,
+                transactions: groupTxs
             };
+        } else {
+            const gData = catData.groups[key];
+            gData.reale += vals.realeVal;
+            gData.forecast += vals.forecastVal;
+            gData.budget += vals.budgetVal;
+            gData.transactions = [...gData.transactions, ...groupTxs];
         }
-        const txData = catData.transactions[key];
-        txData.reale += vals.realeVal;
-        txData.forecast += vals.forecastVal;
-        txData.budget += vals.budgetVal;
     }
 
-    // Group transactions by categoryId and title
+    // Raggruppa le transazioni per categoryId e budgetGroup (o titolo se budgetGroup è vuoto)
     const groups = {};
     state.transactions.forEach(t => {
-        const key = `${t.categoryId}_${t.title.trim()}`;
+        const groupName = (t.budgetGroup && t.budgetGroup.trim() !== '') ? t.budgetGroup.trim() : t.title.trim();
+        const key = `${t.categoryId}_${groupName}`;
         if (!groups[key]) {
             groups[key] = {
                 categoryId: t.categoryId,
-                title: t.title.trim(),
+                groupName: groupName,
                 transactions: []
             };
         }
@@ -1101,55 +1186,59 @@ function updateDashboard() {
         let groupBudget = 0;
         let groupForecast = 0;
 
-        targetMonths.forEach(ym => {
-            let monthReale = 0;
-            let monthBudget = 0;
-            let monthForecast = 0;
+        const txsCalculated = [];
 
-            group.transactions.forEach(t => {
+        group.transactions.forEach(t => {
+            let txReale = 0;
+            let txBudget = 0;
+            let txForecast = 0;
+
+            targetMonths.forEach(ym => {
                 const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-                monthReale += vals.realeVal;
-                monthBudget += vals.budgetVal;
-            });
+                txReale += vals.realeVal;
+                txBudget += vals.budgetVal;
 
-            // Calculate Forecast for this month:
-            // Check if there is any consuntivo transaction in the group with non-zero forecast impact in this month
-            let hasActiveConsuntivo = false;
-            let consuntivoForecastSum = 0;
+                // Calcolo preciso del forecast del singolo movimento basato sul gruppo per evitare discordanze
+                let hasActiveConsuntivo = false;
+                group.transactions.forEach(otherT => {
+                    if (otherT.nature === 'consuntivo') {
+                        const otherVals = getTxValuesForMonth(otherT, ym, isFin, todayYear, todayMonth, todayStr);
+                        if (Math.abs(otherVals.forecastVal) > 0.0001) {
+                            hasActiveConsuntivo = true;
+                        }
+                    }
+                });
 
-            group.transactions.forEach(t => {
-                if (t.nature === 'consuntivo') {
-                    const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-                    if (Math.abs(vals.forecastVal) > 0.0001) {
-                        hasActiveConsuntivo = true;
-                        consuntivoForecastSum += vals.forecastVal;
+                if (hasActiveConsuntivo) {
+                    if (t.nature === 'consuntivo') {
+                        txForecast += vals.forecastVal;
+                    }
+                } else {
+                    if (t.nature !== 'consuntivo') {
+                        txForecast += vals.forecastVal;
                     }
                 }
             });
 
-            if (hasActiveConsuntivo) {
-                monthForecast = consuntivoForecastSum;
-            } else {
-                let preventivoForecastSum = 0;
-                group.transactions.forEach(t => {
-                    if (t.nature !== 'consuntivo') {
-                        const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-                        preventivoForecastSum += vals.forecastVal;
-                    }
-                });
-                monthForecast = preventivoForecastSum;
-            }
+            groupReale += txReale;
+            groupBudget += txBudget;
+            groupForecast += txForecast;
 
-            groupReale += monthReale;
-            groupBudget += monthBudget;
-            groupForecast += monthForecast;
+            if (Math.abs(txReale) > 0.0001 || Math.abs(txBudget) > 0.0001 || Math.abs(txForecast) > 0.0001) {
+                txsCalculated.push({
+                    tx: t,
+                    reale: txReale,
+                    budget: txBudget,
+                    forecast: txForecast
+                });
+            }
         });
 
         if (Math.abs(groupReale) > 0.0001 || Math.abs(groupBudget) > 0.0001 || Math.abs(groupForecast) > 0.0001) {
             const representativeTx = group.transactions.find(t => t.nature !== 'consuntivo') || group.transactions[0];
             const type = representativeTx.type;
 
-            addToTree(type, cat, group.title, representativeTx, { realeVal: groupReale, budgetVal: groupBudget, forecastVal: groupForecast });
+            addToTree(type, cat, group.groupName, representativeTx, { realeVal: groupReale, budgetVal: groupBudget, forecastVal: groupForecast }, txsCalculated);
         }
     });
 
@@ -1243,40 +1332,70 @@ function updateDashboard() {
                 </tr>
             `;
 
-            const sortedIncTxs = Object.values(catData.transactions).sort((a, b) => {
-                const dateCompare = b.tx.date.localeCompare(a.tx.date);
-                if (dateCompare !== 0) return dateCompare;
-                return a.tx.title.localeCompare(b.tx.title);
+            const sortedIncGroups = Object.values(catData.groups).sort((a, b) => {
+                return a.groupName.toLowerCase().localeCompare(b.groupName.toLowerCase());
             });
 
-            sortedIncTxs.forEach(tObj => {
-                const tx = tObj.tx;
-                const [yr, mo, dy] = tx.date.split('-').map(Number);
-                const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
-                
-                const FREQ_MAP = {
-                    'one-time': 'Una Tantum',
-                    'monthly': 'Mensile',
-                    'bimonthly': 'Bimestrale',
-                    'quarterly': 'Trimestrale',
-                    'semiannual': 'Semestrale',
-                    'annual': 'Annuale'
-                };
+            sortedIncGroups.forEach(gObj => {
+                const groupName = gObj.groupName;
+                const groupId = 'g-' + btoa(unescape(encodeURIComponent(groupName))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
                 html += `
-                    <tr class="row-transaction hidden" data-voice="income" data-category="${catId}">
-                        <td class="indent-transaction">
-                            <div class="transaction-name-wrapper">
-                                <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
-                                <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency}</span>
+                    <tr class="row-group hidden" data-voice="income" data-category="${catId}" data-group="${groupId}" data-expanded="false">
+                        <td class="indent-group">
+                            <div class="group-name-wrapper">
+                                <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.75rem; color: var(--text-secondary);"></i>
+                                <span style="font-weight: 500;">${groupName}</span>
                             </div>
                         </td>
-                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.reale, true)}</td>
-                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.forecast, true)}</td>
-                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.budget, true)}</td>
-                        ${getComparisonCells(tObj.reale, tObj.forecast, tObj.budget, 'income')}
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.85rem;">${formatTableCellValue(gObj.reale, true)}</td>
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.85rem;">${formatTableCellValue(gObj.forecast, true)}</td>
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.85rem;">${formatTableCellValue(gObj.budget, true)}</td>
+                        ${getComparisonCells(gObj.reale, gObj.forecast, gObj.budget, 'income')}
                     </tr>
                 `;
+
+                const sortedIncTxs = gObj.transactions.sort((a, b) => {
+                    const dateCompare = b.tx.date.localeCompare(a.tx.date);
+                    if (dateCompare !== 0) return dateCompare;
+                    return a.tx.title.localeCompare(b.tx.title);
+                });
+
+                sortedIncTxs.forEach(tObj => {
+                    const tx = tObj.tx;
+                    const [yr, mo, dy] = tx.date.split('-').map(Number);
+                    const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
+                    
+                    const FREQ_MAP = {
+                        'one-time': 'Una Tantum',
+                        'monthly': 'Mensile',
+                        'bimonthly': 'Bimestrale',
+                        'quarterly': 'Trimestrale',
+                        'semiannual': 'Semestrale',
+                        'annual': 'Annuale'
+                    };
+
+                    const NATURE_MAP = {
+                        'preventivo': 'Budget',
+                        'consuntivo': 'Reale',
+                        'accantonamento': 'Accantonamento'
+                    };
+
+                    html += `
+                        <tr class="row-transaction hidden" data-voice="income" data-category="${catId}" data-group="${groupId}">
+                            <td class="indent-transaction">
+                                <div class="transaction-name-wrapper">
+                                    <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
+                                    <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency} &bull; ${NATURE_MAP[tx.nature]}</span>
+                                </div>
+                            </td>
+                            <td style="text-align: right; font-size: 0.8rem; color: var(--text-secondary);">${formatTableCellValue(tObj.reale, true)}</td>
+                            <td style="text-align: right; font-size: 0.8rem; color: var(--text-secondary);">${formatTableCellValue(tObj.forecast, true)}</td>
+                            <td style="text-align: right; font-size: 0.8rem; color: var(--text-secondary);">${formatTableCellValue(tObj.budget, true)}</td>
+                            ${getComparisonCells(tObj.reale, tObj.forecast, tObj.budget, 'income')}
+                        </tr>
+                    `;
+                });
             });
         });
 
@@ -1318,40 +1437,70 @@ function updateDashboard() {
                 </tr>
             `;
 
-            const sortedExpTxs = Object.values(catData.transactions).sort((a, b) => {
-                const dateCompare = b.tx.date.localeCompare(a.tx.date);
-                if (dateCompare !== 0) return dateCompare;
-                return a.tx.title.localeCompare(b.tx.title);
+            const sortedExpGroups = Object.values(catData.groups).sort((a, b) => {
+                return a.groupName.toLowerCase().localeCompare(b.groupName.toLowerCase());
             });
 
-            sortedExpTxs.forEach(tObj => {
-                const tx = tObj.tx;
-                const [yr, mo, dy] = tx.date.split('-').map(Number);
-                const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
-                
-                const FREQ_MAP = {
-                    'one-time': 'Una Tantum',
-                    'monthly': 'Mensile',
-                    'bimonthly': 'Bimestrale',
-                    'quarterly': 'Trimestrale',
-                    'semiannual': 'Semestrale',
-                    'annual': 'Annuale'
-                };
+            sortedExpGroups.forEach(gObj => {
+                const groupName = gObj.groupName;
+                const groupId = 'g-' + btoa(unescape(encodeURIComponent(groupName))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
                 html += `
-                    <tr class="row-transaction hidden" data-voice="expense" data-category="${catId}">
-                        <td class="indent-transaction">
-                            <div class="transaction-name-wrapper">
-                                <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
-                                <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency}</span>
+                    <tr class="row-group hidden" data-voice="expense" data-category="${catId}" data-group="${groupId}" data-expanded="false">
+                        <td class="indent-group">
+                            <div class="group-name-wrapper">
+                                <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.75rem; color: var(--text-secondary);"></i>
+                                <span style="font-weight: 500;">${groupName}</span>
                             </div>
                         </td>
-                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.reale, true)}</td>
-                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.forecast, true)}</td>
-                        <td style="text-align: right; font-size: 0.85rem; color: var(--text-secondary);">${formatTableCellValue(tObj.budget, true)}</td>
-                        ${getComparisonCells(tObj.reale, tObj.forecast, tObj.budget, 'expense')}
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.85rem;">${formatTableCellValue(gObj.reale, true)}</td>
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.85rem;">${formatTableCellValue(gObj.forecast, true)}</td>
+                        <td style="text-align: right; color: var(--text-primary); font-size: 0.85rem;">${formatTableCellValue(gObj.budget, true)}</td>
+                        ${getComparisonCells(gObj.reale, gObj.forecast, gObj.budget, 'expense')}
                     </tr>
                 `;
+
+                const sortedExpTxs = gObj.transactions.sort((a, b) => {
+                    const dateCompare = b.tx.date.localeCompare(a.tx.date);
+                    if (dateCompare !== 0) return dateCompare;
+                    return a.tx.title.localeCompare(b.tx.title);
+                });
+
+                sortedExpTxs.forEach(tObj => {
+                    const tx = tObj.tx;
+                    const [yr, mo, dy] = tx.date.split('-').map(Number);
+                    const formattedDate = `${String(dy).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yr}`;
+                    
+                    const FREQ_MAP = {
+                        'one-time': 'Una Tantum',
+                        'monthly': 'Mensile',
+                        'bimonthly': 'Bimestrale',
+                        'quarterly': 'Trimestrale',
+                        'semiannual': 'Semestrale',
+                        'annual': 'Annuale'
+                    };
+
+                    const NATURE_MAP = {
+                        'preventivo': 'Budget',
+                        'consuntivo': 'Reale',
+                        'accantonamento': 'Accantonamento'
+                    };
+
+                    html += `
+                        <tr class="row-transaction hidden" data-voice="expense" data-category="${catId}" data-group="${groupId}">
+                            <td class="indent-transaction">
+                                <div class="transaction-name-wrapper">
+                                    <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
+                                    <span class="tx-meta-info">${formattedDate} &bull; ${FREQ_MAP[tx.frequency] || tx.frequency} &bull; ${NATURE_MAP[tx.nature]}</span>
+                                </div>
+                            </td>
+                            <td style="text-align: right; font-size: 0.8rem; color: var(--text-secondary);">${formatTableCellValue(tObj.reale, true)}</td>
+                            <td style="text-align: right; font-size: 0.8rem; color: var(--text-secondary);">${formatTableCellValue(tObj.forecast, true)}</td>
+                            <td style="text-align: right; font-size: 0.8rem; color: var(--text-secondary);">${formatTableCellValue(tObj.budget, true)}</td>
+                            ${getComparisonCells(tObj.reale, tObj.forecast, tObj.budget, 'expense')}
+                        </tr>
+                    `;
+                });
             });
         });
 
