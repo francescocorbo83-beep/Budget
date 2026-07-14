@@ -802,6 +802,18 @@ input[type="color"] {
     background: rgba(255, 255, 255, 0.04);
 }
 
+.row-group {
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    background: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    transition: background 0.2s ease;
+}
+.row-group:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
 .row-transaction {
     font-size: 0.85rem;
     color: var(--text-secondary);
@@ -819,8 +831,18 @@ input[type="color"] {
     gap: 0.5rem;
 }
 
-.indent-transaction {
+.indent-group {
     padding-left: 3.5rem !important;
+}
+
+.group-name-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.indent-transaction {
+    padding-left: 5rem !important;
 }
 
 .transaction-name-wrapper {
@@ -838,7 +860,8 @@ input[type="color"] {
 }
 
 .row-metric[data-expanded="true"] .chevron-icon,
-.row-category[data-expanded="true"] .chevron-icon {
+.row-category[data-expanded="true"] .chevron-icon,
+.row-group[data-expanded="true"] .chevron-icon {
     transform: rotate(90deg);
 }
 
