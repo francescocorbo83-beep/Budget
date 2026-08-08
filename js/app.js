@@ -1543,6 +1543,37 @@ function updateDashboard() {
         tbody.innerHTML = html;
     }
 
+    // Aggiornamento Box Chiusura Stimata (Forecast di periodo)
+    const closingLabelEl = document.getElementById('forecast-closing-label');
+    const closingValEl = document.getElementById('forecast-closing-val');
+    if (closingLabelEl && closingValEl) {
+        const period = document.getElementById('filter-period')?.value || 'monthly';
+        const filterMonth = document.getElementById('filter-month')?.value;
+        const filterYear = document.getElementById('filter-year')?.value;
+        const typeFilter = document.getElementById('filter-dash-type')?.value || 'all';
+
+        let forecastVal = tree.income.forecast - tree.expense.forecast;
+        if (typeFilter === 'income') forecastVal = tree.income.forecast;
+        if (typeFilter === 'expense') forecastVal = -tree.expense.forecast;
+
+        if (period === 'annual') {
+            const y = filterYear || todayYear;
+            closingLabelEl.textContent = `Chiusura Stimata Anno (${y}):`;
+        } else {
+            let mName = '';
+            if (filterMonth) {
+                const [y, m] = filterMonth.split('-').map(Number);
+                const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+                mName = `${monthNames[m - 1]} ${y}`;
+            }
+            closingLabelEl.textContent = mName ? `Chiusura Stimata Mese (${mName}):` : `Chiusura Stimata Mese:`;
+        }
+
+        const formattedVal = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(forecastVal);
+        closingValEl.textContent = (forecastVal > 0 ? '+' : '') + formattedVal;
+        closingValEl.style.color = forecastVal >= 0 ? 'var(--success)' : 'var(--danger)';
+    }
+
     updateDashboardChart();
 }
 
