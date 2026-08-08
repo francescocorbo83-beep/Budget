@@ -1580,24 +1580,73 @@ function updateDashboard() {
             }
         }
 
-        let cumForecastVal = 0;
-        const filteredTxs = state.transactions.filter(t => {
-            if (catFilter !== 'all' && t.categoryId !== catFilter) return false;
-            if (typeFilter !== 'all' && t.type !== typeFilter) return false;
-            return true;
+        // Costruiamo la lista di mesi da calcolare (da Gennaio a cMaxMonth)
+        const closingMonthsList = [];
+        for (let m = 1; m <= cMaxMonth; m++) {
+            closingMonthsList.push({ year: cYear, month: m });
+        }
+
+        // Raggruppiamo le transazioni per raggruppare consuntivo e preventivo dello stesso gruppo
+        const closingGroups = {};
+        state.transactions.forEach(t => {
+            if (catFilter !== 'all' && t.categoryId !== catFilter) return;
+            if (typeFilter !== 'all' && t.type !== typeFilter) return;
+
+            const groupName = (t.budgetGroup && t.budgetGroup.trim() !== '') ? t.budgetGroup.trim() : t.title.trim();
+            const key = `${t.categoryId}_${groupName}`;
+            if (!closingGroups[key]) {
+                closingGroups[key] = {
+                    categoryId: t.categoryId,
+                    groupName: groupName,
+                    transactions: []
+                };
+            }
+            closingGroups[key].transactions.push(t);
         });
 
-        for (let m = 1; m <= cMaxMonth; m++) {
-            const ym = { year: cYear, month: m };
-            filteredTxs.forEach(t => {
-                const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-                if (t.type === 'income') {
-                    cumForecastVal += vals.forecastVal;
-                } else {
-                    cumForecastVal -= vals.forecastVal;
-                }
+        let cumForecastVal = 0;
+
+        Object.values(closingGroups).forEach(group => {
+            const representativeTx = group.transactions.find(t => t.nature !== 'consuntivo') || group.transactions[0];
+            const type = representativeTx.type;
+
+            let groupForecastSum = 0;
+
+            group.transactions.forEach(t => {
+                let txForecast = 0;
+                closingMonthsList.forEach(ym => {
+                    const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+
+                    let hasActiveConsuntivo = false;
+                    group.transactions.forEach(otherT => {
+                        if (otherT.nature === 'consuntivo') {
+                            const otherVals = getTxValuesForMonth(otherT, ym, isFin, todayYear, todayMonth, todayStr);
+                            if (Math.abs(otherVals.forecastVal) > 0.0001) {
+                                hasActiveConsuntivo = true;
+                            }
+                        }
+                    });
+
+                    if (hasActiveConsuntivo) {
+                        if (t.nature === 'consuntivo') {
+                            txForecast += vals.forecastVal;
+                        }
+                    } else {
+                        if (t.nature !== 'consuntivo') {
+                            txForecast += vals.forecastVal;
+                        }
+                    }
+                });
+
+                groupForecastSum += txForecast;
             });
-        }
+
+            if (type === 'income') {
+                cumForecastVal += groupForecastSum;
+            } else {
+                cumForecastVal -= groupForecastSum;
+            }
+        });
 
         closingLabelEl.textContent = labelText;
         const formattedVal = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(cumForecastVal);
