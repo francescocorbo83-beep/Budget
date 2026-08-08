@@ -1668,6 +1668,35 @@ function updateDashboardChart() {
                 mode: 'index',
                 intersect: false,
             },
+            onHover: (event, activeElements) => {
+                const target = event.native ? event.native.target : (event.target || null);
+                if (target) {
+                    target.style.cursor = (activeElements && activeElements.length > 0) ? 'pointer' : 'default';
+                }
+            },
+            onClick: (event, activeElements, chart) => {
+                const points = chart.getElementsAtEventForMode(event.native || event, 'index', { intersect: false }, true);
+                if (points && points.length > 0) {
+                    const monthIndex = points[0].index; // 0 per Gen, 1 per Feb, ..., 11 per Dic
+                    const selectedMonthNum = monthIndex + 1;
+                    const monthStr = String(selectedMonthNum).padStart(2, '0');
+                    const targetMonthValue = `${targetYear}-${monthStr}`;
+
+                    const periodSelect = document.getElementById('filter-period');
+                    const monthInput = document.getElementById('filter-month');
+                    const yearContainer = document.getElementById('year-filter-container');
+                    const monthContainer = document.getElementById('month-filter-container');
+
+                    if (periodSelect && monthInput) {
+                        periodSelect.value = 'monthly';
+                        monthInput.value = targetMonthValue;
+                        if (monthContainer) monthContainer.classList.remove('hidden');
+                        if (yearContainer) yearContainer.classList.add('hidden');
+
+                        updateDashboard();
+                    }
+                }
+            },
             plugins: {
                 legend: {
                     position: 'top',
