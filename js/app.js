@@ -162,11 +162,11 @@ function initUI() {
             budgetGroupInput.value = '';
         }
         
-        // Gestione checkbox ripetizione annuale
-        const natureSelect = document.getElementById('tx-nature');
+        // Gestione checkbox ripetizione in base alla frequenza
+        const freqSelect = document.getElementById('tx-frequency');
         const repeatRow = document.getElementById('row-repeat-yearly');
-        if (repeatRow && natureSelect) {
-            repeatRow.classList.toggle('hidden', natureSelect.value !== 'preventivo');
+        if (repeatRow && freqSelect) {
+            repeatRow.classList.toggle('hidden', freqSelect.value === 'one-time');
         }
         const repeatCheck = document.getElementById('tx-repeat-yearly');
         if (repeatCheck) {
@@ -176,12 +176,12 @@ function initUI() {
         document.getElementById('modal-transaction').classList.remove('hidden');
     });
 
-    const natureSelectEl = document.getElementById('tx-nature');
-    if (natureSelectEl) {
-        natureSelectEl.addEventListener('change', (e) => {
+    const freqSelectEl = document.getElementById('tx-frequency');
+    if (freqSelectEl) {
+        freqSelectEl.addEventListener('change', (e) => {
             const repeatRow = document.getElementById('row-repeat-yearly');
             if (repeatRow) {
-                repeatRow.classList.toggle('hidden', e.target.value !== 'preventivo');
+                repeatRow.classList.toggle('hidden', e.target.value === 'one-time');
             }
         });
     }
@@ -611,14 +611,14 @@ function editTransaction(id) {
         budgetGroupInput.value = tx.budgetGroup || '';
     }
 
-    // Popola lo stato del checkbox ripetizione annuale e mostralo se è di tipo preventivo
+    // Popola lo stato del checkbox ripetizione e mostralo se la frequenza non è una tantum
     const repeatCheck = document.getElementById('tx-repeat-yearly');
     if (repeatCheck) {
         repeatCheck.checked = !!tx.repeatYearly;
     }
     const repeatRow = document.getElementById('row-repeat-yearly');
     if (repeatRow) {
-        repeatRow.classList.toggle('hidden', tx.nature !== 'preventivo');
+        repeatRow.classList.toggle('hidden', tx.frequency === 'one-time');
     }
 
     document.getElementById('modal-tx-title').textContent = 'Modifica Transazione';
@@ -960,21 +960,11 @@ function getMonthlyImpact(tx, targetYear, targetMonth, calculationMode) {
             
             return isHit ? txAmount : 0;
         } else {
-            // Se non ripete ogni anno, limitiamo l'impatto di cassa all'anno solare originale
-            if (targetYear !== txYear || targetMonth < txMonth) {
-                return 0;
+            // Se non ripete nel futuro (repeatYearly = false), l'impatto di cassa vale solo ed esclusivamente per il mese/anno della data della transazione
+            if (txYear === targetYear && txMonth === targetMonth) {
+                return txAmount;
             }
-
-            const monthDiff = targetMonth - txMonth;
-            let isHit = false;
-            
-            if (tx.frequency === 'monthly') isHit = true;
-            else if (tx.frequency === 'bimonthly') isHit = (monthDiff % 2 === 0);
-            else if (tx.frequency === 'quarterly') isHit = (monthDiff % 3 === 0);
-            else if (tx.frequency === 'semiannual') isHit = (monthDiff % 6 === 0);
-            else if (tx.frequency === 'annual') isHit = (monthDiff % 12 === 0);
-            
-            return isHit ? txAmount : 0;
+            return 0;
         }
     }
 
