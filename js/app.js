@@ -162,26 +162,22 @@ function initUI() {
             budgetGroupInput.value = '';
         }
         
-        // Gestione checkbox ripetizione in base alla frequenza
-        const freqSelect = document.getElementById('tx-frequency');
-        const repeatRow = document.getElementById('row-repeat-yearly');
-        if (repeatRow && freqSelect) {
-            repeatRow.classList.toggle('hidden', freqSelect.value === 'one-time');
-        }
+        // Gestione checkbox ripetizione
+        const natureSelect = document.getElementById('tx-nature');
         const repeatCheck = document.getElementById('tx-repeat-yearly');
         if (repeatCheck) {
-            repeatCheck.checked = false;
+            repeatCheck.checked = natureSelect ? natureSelect.value === 'preventivo' : false;
         }
         
         document.getElementById('modal-transaction').classList.remove('hidden');
     });
 
-    const freqSelectEl = document.getElementById('tx-frequency');
-    if (freqSelectEl) {
-        freqSelectEl.addEventListener('change', (e) => {
-            const repeatRow = document.getElementById('row-repeat-yearly');
-            if (repeatRow) {
-                repeatRow.classList.toggle('hidden', e.target.value === 'one-time');
+    const natureSelectEl = document.getElementById('tx-nature');
+    if (natureSelectEl) {
+        natureSelectEl.addEventListener('change', (e) => {
+            const repeatCheck = document.getElementById('tx-repeat-yearly');
+            if (repeatCheck && !document.getElementById('tx-id').value) {
+                repeatCheck.checked = e.target.value === 'preventivo';
             }
         });
     }
@@ -611,14 +607,10 @@ function editTransaction(id) {
         budgetGroupInput.value = tx.budgetGroup || '';
     }
 
-    // Popola lo stato del checkbox ripetizione e mostralo se la frequenza non è una tantum
+    // Popola lo stato del checkbox ripetizione
     const repeatCheck = document.getElementById('tx-repeat-yearly');
     if (repeatCheck) {
         repeatCheck.checked = !!tx.repeatYearly;
-    }
-    const repeatRow = document.getElementById('row-repeat-yearly');
-    if (repeatRow) {
-        repeatRow.classList.toggle('hidden', tx.frequency === 'one-time');
     }
 
     document.getElementById('modal-tx-title').textContent = 'Modifica Transazione';
@@ -918,12 +910,8 @@ function getMonthlyImpact(tx, targetYear, targetMonth, calculationMode) {
             }
             return 0;
         } else {
-            // Se non ripete ogni anno, limitiamo la competenza all'anno solare originale della transazione
-            let lastOccurrenceMonth = txMonth;
-            while (lastOccurrenceMonth + p <= 12) {
-                lastOccurrenceMonth += p;
-            }
-            const absoluteEndMonth = txYear * 12 + lastOccurrenceMonth;
+            // Se non ripete nel futuro (repeatYearly = false), la competenza vale SOLO per il singolo ciclo di p mesi che si conclude nel mese della transazione (txMonth)
+            const absoluteEndMonth = absoluteTxMonth;
 
             if (absoluteTargetMonth >= absoluteStartMonth && absoluteTargetMonth <= absoluteEndMonth) {
                 return txAmount / p;
