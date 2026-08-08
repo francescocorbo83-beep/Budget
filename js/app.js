@@ -1538,9 +1538,19 @@ function updateDashboardChart() {
     const dd = String(today.getDate()).padStart(2, '0');
     const todayStr = `${yyyy}-${mm}-${dd}`;
 
-    let labels = [];
-    let consuntivoData = [];
-    let budgetData = [];
+    // La vista del grafico è SEMPRE annuale (12 mesi) per l'anno dell'analisi
+    let targetYear = todayYear;
+    if (period === 'annual' && filterYear) {
+        targetYear = parseInt(filterYear);
+    } else if (period === 'monthly' && filterMonth) {
+        targetYear = parseInt(filterMonth.split('-')[0]);
+    }
+
+    const labels = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    const dataIncCons = new Array(12).fill(0);
+    const dataIncBudg = new Array(12).fill(0);
+    const dataExpCons = new Array(12).fill(0);
+    const dataExpBudg = new Array(12).fill(0);
 
     const filteredTxs = state.transactions.filter(t => {
         if (catFilter !== 'all' && t.categoryId !== catFilter) return false;
@@ -1548,63 +1558,97 @@ function updateDashboardChart() {
         return true;
     });
 
-    if (period === 'annual') {
-        const targetYear = parseInt(filterYear || todayYear);
-        labels = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-        consuntivoData = new Array(12).fill(0);
-        budgetData = new Array(12).fill(0);
-
-        for (let m = 1; m <= 12; m++) {
-            const ym = { year: targetYear, month: m };
-            filteredTxs.forEach(t => {
-                const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-                consuntivoData[m - 1] += vals.realeVal;
-                budgetData[m - 1] += vals.budgetVal;
-            });
-        }
-    } else {
-        // Mensile
-        let targetYear = todayYear;
-        let targetMonth = todayMonth;
-        if (filterMonth) {
-            const parts = filterMonth.split('-').map(Number);
-            targetYear = parts[0];
-            targetMonth = parts[1];
-        }
-
-        const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
-        labels = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`);
-        consuntivoData = new Array(daysInMonth).fill(0);
-        budgetData = new Array(daysInMonth).fill(0);
-
-        const ym = { year: targetYear, month: targetMonth };
+    for (let m = 1; m <= 12; m++) {
+        const ym = { year: targetYear, month: m };
         filteredTxs.forEach(t => {
             const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
-            const [tYr, tMo, tDy] = t.date.split('-').map(Number);
-
-            if (vals.realeVal !== 0) {
-                const dayIndex = (tYr === targetYear && tMo === targetMonth) ? Math.min(tDy, daysInMonth) - 1 : 0;
-                consuntivoData[dayIndex] += vals.realeVal;
-            }
-
-            if (vals.budgetVal !== 0) {
-                const dayIndex = (tYr === targetYear && tMo === targetMonth) ? Math.min(tDy, daysInMonth) - 1 : 0;
-                budgetData[dayIndex] += vals.budgetVal;
+            if (t.type === 'income') {
+                dataIncCons[m - 1] += vals.realeVal;
+                dataIncBudg[m - 1] += vals.budgetVal;
+            } else {
+                // Le Uscite vanno in negativo sull'asse delle Y
+                dataExpCons[m - 1] -= vals.realeVal;
+                dataExpBudg[m - 1] -= vals.budgetVal;
             }
         });
     }
 
-    // Colorazione dinamica in base al tipo selezionato
-    let consColor = '#10b981'; // Smeraldo predefinito (o Entrate)
-    let consBg = 'rgba(16, 185, 129, 0.8)';
-    let budgColor = '#6366f1'; // Indaco predefinito
-    let budgBg = 'rgba(99, 102, 241, 0.8)';
+    let datasets = [];
 
-    if (typeFilter === 'expense') {
-        consColor = '#ef4444'; // Rosso per Uscite Consuntivo
-        consBg = 'rgba(239, 68, 68, 0.8)';
-        budgColor = '#f59e0b'; // Ambra per Uscite Budget
-        budgBg = 'rgba(245, 158, 11, 0.8)';
+    if (typeFilter === 'income') {
+        datasets = [
+            {
+                label: 'Entrate Consuntivo',
+                data: dataIncCons,
+                backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                borderColor: '#10b981',
+                borderWidth: 1,
+                borderRadius: 4
+            },
+            {
+                label: 'Entrate Budget',
+                data: dataIncBudg,
+                backgroundColor: 'rgba(99, 102, 241, 0.85)',
+                borderColor: '#6366f1',
+                borderWidth: 1,
+                borderRadius: 4
+            }
+        ];
+    } else if (typeFilter === 'expense') {
+        datasets = [
+            {
+                label: 'Uscite Consuntivo',
+                data: dataExpCons,
+                backgroundColor: 'rgba(239, 68, 68, 0.85)',
+                borderColor: '#ef4444',
+                borderWidth: 1,
+                borderRadius: 4
+            },
+            {
+                label: 'Uscite Budget',
+                data: dataExpBudg,
+                backgroundColor: 'rgba(245, 158, 11, 0.85)',
+                borderColor: '#f59e0b',
+                borderWidth: 1,
+                borderRadius: 4
+            }
+        ];
+    } else {
+        // Tutti i tipi ('all'): Entrate in positivo (+), Uscite in negativo (-)
+        datasets = [
+            {
+                label: 'Entrate Consuntivo',
+                data: dataIncCons,
+                backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                borderColor: '#10b981',
+                borderWidth: 1,
+                borderRadius: 4
+            },
+            {
+                label: 'Entrate Budget',
+                data: dataIncBudg,
+                backgroundColor: 'rgba(99, 102, 241, 0.85)',
+                borderColor: '#6366f1',
+                borderWidth: 1,
+                borderRadius: 4
+            },
+            {
+                label: 'Uscite Consuntivo',
+                data: dataExpCons,
+                backgroundColor: 'rgba(239, 68, 68, 0.85)',
+                borderColor: '#ef4444',
+                borderWidth: 1,
+                borderRadius: 4
+            },
+            {
+                label: 'Uscite Budget',
+                data: dataExpBudg,
+                backgroundColor: 'rgba(245, 158, 11, 0.85)',
+                borderColor: '#f59e0b',
+                borderWidth: 1,
+                borderRadius: 4
+            }
+        ];
     }
 
     if (dashboardChartInstance) {
@@ -1615,24 +1659,7 @@ function updateDashboardChart() {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Consuntivo (Reale)',
-                    data: consuntivoData,
-                    backgroundColor: consBg,
-                    borderColor: consColor,
-                    borderWidth: 1,
-                    borderRadius: 4
-                },
-                {
-                    label: 'Budget',
-                    data: budgetData,
-                    backgroundColor: budgBg,
-                    borderColor: budgColor,
-                    borderWidth: 1,
-                    borderRadius: 4
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -1665,11 +1692,13 @@ function updateDashboardChart() {
             },
             scales: {
                 x: {
+                    stacked: false,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { color: '#94a3b8' }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    stacked: false,
+                    grid: { color: 'rgba(255, 255, 255, 0.08)' },
                     ticks: {
                         color: '#94a3b8',
                         callback: function(value) {
