@@ -1543,35 +1543,66 @@ function updateDashboard() {
         tbody.innerHTML = html;
     }
 
-    // Aggiornamento Box Chiusura Stimata (Forecast di periodo)
+    // Aggiornamento Box Chiusura Stimata (Forecast cumulativo da inizio anno fino al mese selezionato)
     const closingLabelEl = document.getElementById('forecast-closing-label');
     const closingValEl = document.getElementById('forecast-closing-val');
     if (closingLabelEl && closingValEl) {
         const period = document.getElementById('filter-period')?.value || 'monthly';
         const filterMonth = document.getElementById('filter-month')?.value;
         const filterYear = document.getElementById('filter-year')?.value;
+        const catFilter = document.getElementById('filter-dash-category')?.value || 'all';
         const typeFilter = document.getElementById('filter-dash-type')?.value || 'all';
 
-        let forecastVal = tree.income.forecast - tree.expense.forecast;
-        if (typeFilter === 'income') forecastVal = tree.income.forecast;
-        if (typeFilter === 'expense') forecastVal = -tree.expense.forecast;
+        const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+
+        let cYear = todayYear;
+        let cMaxMonth = 12;
+        let labelText = '';
 
         if (period === 'annual') {
-            const y = filterYear || todayYear;
-            closingLabelEl.textContent = `Chiusura Stimata Anno (${y}):`;
+            cYear = parseInt(filterYear || todayYear);
+            cMaxMonth = 12;
+            labelText = `Chiusura Stimata Anno (${cYear}):`;
         } else {
-            let mName = '';
             if (filterMonth) {
                 const [y, m] = filterMonth.split('-').map(Number);
-                const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-                mName = `${monthNames[m - 1]} ${y}`;
+                cYear = y;
+                cMaxMonth = m;
+                if (cMaxMonth === 1) {
+                    labelText = `Chiusura Stimata (Gen ${cYear}):`;
+                } else if (cMaxMonth === 12) {
+                    labelText = `Chiusura Stimata Anno (${cYear}):`;
+                } else {
+                    labelText = `Chiusura Stimata (Gen - ${monthNames[cMaxMonth - 1]} ${cYear}):`;
+                }
+            } else {
+                labelText = `Chiusura Stimata Mese:`;
             }
-            closingLabelEl.textContent = mName ? `Chiusura Stimata Mese (${mName}):` : `Chiusura Stimata Mese:`;
         }
 
-        const formattedVal = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(forecastVal);
-        closingValEl.textContent = (forecastVal > 0 ? '+' : '') + formattedVal;
-        closingValEl.style.color = forecastVal >= 0 ? 'var(--success)' : 'var(--danger)';
+        let cumForecastVal = 0;
+        const filteredTxs = state.transactions.filter(t => {
+            if (catFilter !== 'all' && t.categoryId !== catFilter) return false;
+            if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+            return true;
+        });
+
+        for (let m = 1; m <= cMaxMonth; m++) {
+            const ym = { year: cYear, month: m };
+            filteredTxs.forEach(t => {
+                const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+                if (t.type === 'income') {
+                    cumForecastVal += vals.forecastVal;
+                } else {
+                    cumForecastVal -= vals.forecastVal;
+                }
+            });
+        }
+
+        closingLabelEl.textContent = labelText;
+        const formattedVal = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(cumForecastVal);
+        closingValEl.textContent = (cumForecastVal > 0 ? '+' : '') + formattedVal;
+        closingValEl.style.color = cumForecastVal >= 0 ? 'var(--success)' : 'var(--danger)';
     }
 
     updateDashboardChart();
