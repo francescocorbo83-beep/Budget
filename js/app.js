@@ -17,6 +17,12 @@ let state = {
 
 let annualChartInstance = null;
 
+const expandedTableState = {
+    voices: new Set(),
+    categories: new Set(),
+    groups: new Set()
+};
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     loadLocalData();
@@ -371,6 +377,11 @@ function initUI() {
                 if (voice === 'balance') return; // Il bilancio non si espande!
                 
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
+                if (!isExpanded) {
+                    expandedTableState.voices.add(voice);
+                } else {
+                    expandedTableState.voices.delete(voice);
+                }
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
                 const catRows = tableBody.querySelectorAll(`.row-category[data-voice="${voice}"]`);
@@ -378,19 +389,14 @@ function initUI() {
                 const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"]`);
                 
                 if (!isExpanded) {
-                    // Expand Level 1: show categories
                     catRows.forEach(row => {
                         row.classList.remove('hidden');
-                        
-                        // If category is also expanded, show its groups
                         const catId = row.getAttribute('data-category');
                         const catExpanded = row.getAttribute('data-expanded') === 'true';
                         if (catExpanded) {
                             const catGroupRows = tableBody.querySelectorAll(`.row-group[data-voice="${voice}"][data-category="${catId}"]`);
                             catGroupRows.forEach(gRow => {
                                 gRow.classList.remove('hidden');
-                                
-                                // If group is also expanded, show its transactions
                                 const groupId = gRow.getAttribute('data-group');
                                 const groupExpanded = gRow.getAttribute('data-expanded') === 'true';
                                 if (groupExpanded) {
@@ -401,7 +407,6 @@ function initUI() {
                         }
                     });
                 } else {
-                    // Collapse Level 1: hide all category, group, and transaction rows under this voice
                     catRows.forEach(row => row.classList.add('hidden'));
                     groupRows.forEach(row => row.classList.add('hidden'));
                     txRows.forEach(row => row.classList.add('hidden'));
@@ -410,18 +415,21 @@ function initUI() {
             else if (tr.classList.contains('row-category')) {
                 const voice = tr.getAttribute('data-voice');
                 const category = tr.getAttribute('data-category');
+                const key = `${voice}_${category}`;
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
+                if (!isExpanded) {
+                    expandedTableState.categories.add(key);
+                } else {
+                    expandedTableState.categories.delete(key);
+                }
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
                 const groupRows = tableBody.querySelectorAll(`.row-group[data-voice="${voice}"][data-category="${category}"]`);
                 const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${category}"]`);
                 
                 if (!isExpanded) {
-                    // Expand Level 2: show groups
                     groupRows.forEach(row => {
                         row.classList.remove('hidden');
-                        
-                        // If group is also expanded, show its transactions
                         const groupId = row.getAttribute('data-group');
                         const groupExpanded = row.getAttribute('data-expanded') === 'true';
                         if (groupExpanded) {
@@ -430,7 +438,6 @@ function initUI() {
                         }
                     });
                 } else {
-                    // Collapse Level 2: hide groups and transactions
                     groupRows.forEach(row => row.classList.add('hidden'));
                     txRows.forEach(row => row.classList.add('hidden'));
                 }
@@ -439,7 +446,13 @@ function initUI() {
                 const voice = tr.getAttribute('data-voice');
                 const category = tr.getAttribute('data-category');
                 const group = tr.getAttribute('data-group');
+                const key = `${voice}_${category}_${group}`;
                 const isExpanded = tr.getAttribute('data-expanded') === 'true';
+                if (!isExpanded) {
+                    expandedTableState.groups.add(key);
+                } else {
+                    expandedTableState.groups.delete(key);
+                }
                 tr.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
                 
                 const txRows = tableBody.querySelectorAll(`.row-transaction[data-voice="${voice}"][data-category="${category}"][data-group="${group}"]`);
@@ -1284,8 +1297,9 @@ function updateDashboard() {
 
         // 1. Rendering di ENTRATE
         const inc = tree.income;
+        const incVoiceExpanded = expandedTableState.voices.has('income');
         html += `
-            <tr class="row-metric" data-voice="income" data-expanded="false">
+            <tr class="row-metric" data-voice="income" data-expanded="${incVoiceExpanded ? 'true' : 'false'}">
                 <td style="padding-left: 1rem;">
                     <i class="fa-solid fa-chevron-right chevron-icon" style="color: var(--text-secondary);"></i>
                     <strong>${inc.name}</strong>
@@ -1304,8 +1318,11 @@ function updateDashboard() {
         sortedIncCats.forEach(catId => {
             const catData = inc.categories[catId];
             const cat = catData.category;
+            const catExpanded = expandedTableState.categories.has(`income_${catId}`);
+            const catVisible = incVoiceExpanded;
+
             html += `
-                <tr class="row-category hidden" data-voice="income" data-category="${catId}" data-expanded="false">
+                <tr class="row-category ${catVisible ? '' : 'hidden'}" data-voice="income" data-category="${catId}" data-expanded="${catExpanded ? 'true' : 'false'}">
                     <td class="indent-category">
                         <div class="category-name-wrapper">
                             <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.8rem; color: var(--text-secondary);"></i>
@@ -1327,9 +1344,11 @@ function updateDashboard() {
             sortedIncGroups.forEach(gObj => {
                 const groupName = gObj.groupName;
                 const groupId = 'g-' + btoa(unescape(encodeURIComponent(groupName))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+                const groupExpanded = expandedTableState.groups.has(`income_${catId}_${groupId}`);
+                const groupVisible = incVoiceExpanded && catExpanded;
 
                 html += `
-                    <tr class="row-group hidden" data-voice="income" data-category="${catId}" data-group="${groupId}" data-expanded="false">
+                    <tr class="row-group ${groupVisible ? '' : 'hidden'}" data-voice="income" data-category="${catId}" data-group="${groupId}" data-expanded="${groupExpanded ? 'true' : 'false'}">
                         <td class="indent-group">
                             <div class="group-name-wrapper">
                                 <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.75rem; color: var(--text-secondary);"></i>
@@ -1348,6 +1367,8 @@ function updateDashboard() {
                     if (dateCompare !== 0) return dateCompare;
                     return a.tx.title.localeCompare(b.tx.title);
                 });
+
+                const txVisible = incVoiceExpanded && catExpanded && groupExpanded;
 
                 sortedIncTxs.forEach(tObj => {
                     const tx = tObj.tx;
@@ -1370,7 +1391,7 @@ function updateDashboard() {
                     };
 
                     html += `
-                        <tr class="row-transaction hidden" data-voice="income" data-category="${catId}" data-group="${groupId}">
+                        <tr class="row-transaction ${txVisible ? '' : 'hidden'}" data-voice="income" data-category="${catId}" data-group="${groupId}">
                             <td class="indent-transaction">
                                 <div class="transaction-name-wrapper">
                                     <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
@@ -1389,8 +1410,10 @@ function updateDashboard() {
 
         // 2. Rendering di USCITE
         const exp = tree.expense;
+        const expVoiceExpanded = expandedTableState.voices.has('expense');
+
         html += `
-            <tr class="row-metric" data-voice="expense" data-expanded="false" style="border-top: 2px solid var(--panel-border);">
+            <tr class="row-metric" data-voice="expense" data-expanded="${expVoiceExpanded ? 'true' : 'false'}" style="border-top: 2px solid var(--panel-border);">
                 <td style="padding-left: 1rem;">
                     <i class="fa-solid fa-chevron-right chevron-icon" style="color: var(--text-secondary);"></i>
                     <strong>${exp.name}</strong>
@@ -1409,8 +1432,11 @@ function updateDashboard() {
         sortedExpCats.forEach(catId => {
             const catData = exp.categories[catId];
             const cat = catData.category;
+            const catExpanded = expandedTableState.categories.has(`expense_${catId}`);
+            const catVisible = expVoiceExpanded;
+
             html += `
-                <tr class="row-category hidden" data-voice="expense" data-category="${catId}" data-expanded="false">
+                <tr class="row-category ${catVisible ? '' : 'hidden'}" data-voice="expense" data-category="${catId}" data-expanded="${catExpanded ? 'true' : 'false'}">
                     <td class="indent-category">
                         <div class="category-name-wrapper">
                             <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.8rem; color: var(--text-secondary);"></i>
@@ -1432,9 +1458,11 @@ function updateDashboard() {
             sortedExpGroups.forEach(gObj => {
                 const groupName = gObj.groupName;
                 const groupId = 'g-' + btoa(unescape(encodeURIComponent(groupName))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+                const groupExpanded = expandedTableState.groups.has(`expense_${catId}_${groupId}`);
+                const groupVisible = expVoiceExpanded && catExpanded;
 
                 html += `
-                    <tr class="row-group hidden" data-voice="expense" data-category="${catId}" data-group="${groupId}" data-expanded="false">
+                    <tr class="row-group ${groupVisible ? '' : 'hidden'}" data-voice="expense" data-category="${catId}" data-group="${groupId}" data-expanded="${groupExpanded ? 'true' : 'false'}">
                         <td class="indent-group">
                             <div class="group-name-wrapper">
                                 <i class="fa-solid fa-chevron-right chevron-icon" style="font-size: 0.75rem; color: var(--text-secondary);"></i>
@@ -1453,6 +1481,8 @@ function updateDashboard() {
                     if (dateCompare !== 0) return dateCompare;
                     return a.tx.title.localeCompare(b.tx.title);
                 });
+
+                const txVisible = expVoiceExpanded && catExpanded && groupExpanded;
 
                 sortedExpTxs.forEach(tObj => {
                     const tx = tObj.tx;
@@ -1475,7 +1505,7 @@ function updateDashboard() {
                     };
 
                     html += `
-                        <tr class="row-transaction hidden" data-voice="expense" data-category="${catId}" data-group="${groupId}">
+                        <tr class="row-transaction ${txVisible ? '' : 'hidden'}" data-voice="expense" data-category="${catId}" data-group="${groupId}">
                             <td class="indent-transaction">
                                 <div class="transaction-name-wrapper">
                                     <span style="color: var(--text-primary); font-weight: 400;">${tx.title}</span>
