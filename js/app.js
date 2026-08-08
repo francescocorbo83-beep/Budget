@@ -133,9 +133,13 @@ function initUI() {
     document.getElementById('filter-month').addEventListener('change', updateDashboard);
     document.getElementById('filter-year').addEventListener('change', updateDashboard);
 
-    const chartFilter = document.getElementById('chart-category-filter');
-    if (chartFilter) {
-        chartFilter.addEventListener('change', updateAnnualChart);
+    const dashCatFilter = document.getElementById('filter-dash-category');
+    if (dashCatFilter) {
+        dashCatFilter.addEventListener('change', updateDashboard);
+    }
+    const dashTypeFilter = document.getElementById('filter-dash-type');
+    if (dashTypeFilter) {
+        dashTypeFilter.addEventListener('change', updateDashboard);
     }
 
     // Modals
@@ -714,11 +718,11 @@ function populateCategorySelect() {
     const select = document.getElementById('tx-category');
     select.innerHTML = '';
     
-    const chartSelect = document.getElementById('chart-category-filter');
-    let currentChartFilter = 'all';
-    if (chartSelect) {
-        currentChartFilter = chartSelect.value || 'all';
-        chartSelect.innerHTML = '<option value="all">Tutte le Categorie</option>';
+    const dashSelect = document.getElementById('filter-dash-category');
+    let currentDashFilter = 'all';
+    if (dashSelect) {
+        currentDashFilter = dashSelect.value || 'all';
+        dashSelect.innerHTML = '<option value="all">Tutte le Categorie</option>';
     }
 
     const tableSelect = document.getElementById('filter-tx-category');
@@ -741,11 +745,11 @@ function populateCategorySelect() {
         opt.textContent = cat.name;
         select.appendChild(opt);
         
-        if (chartSelect) {
-            const chartOpt = document.createElement('option');
-            chartOpt.value = cat.id;
-            chartOpt.textContent = cat.name;
-            chartSelect.appendChild(chartOpt);
+        if (dashSelect) {
+            const dashOpt = document.createElement('option');
+            dashOpt.value = cat.id;
+            dashOpt.textContent = cat.name;
+            dashSelect.appendChild(dashOpt);
         }
 
         if (tableSelect) {
@@ -768,7 +772,7 @@ function populateCategorySelect() {
         }
     });
     
-    if (chartSelect) chartSelect.value = currentChartFilter;
+    if (dashSelect) dashSelect.value = currentDashFilter;
     if (tableSelect) tableSelect.value = currentTableFilter;
 }
 
@@ -1142,9 +1146,15 @@ function updateDashboard() {
         }
     }
 
+    const catFilter = document.getElementById('filter-dash-category')?.value || 'all';
+    const typeFilter = document.getElementById('filter-dash-type')?.value || 'all';
+
     // Raggruppa le transazioni per categoryId e budgetGroup (o titolo se budgetGroup è vuoto)
     const groups = {};
     state.transactions.forEach(t => {
+        if (catFilter !== 'all' && t.categoryId !== catFilter) return;
+        if (typeFilter !== 'all' && t.type !== typeFilter) return;
+
         const groupName = (t.budgetGroup && t.budgetGroup.trim() !== '') ? t.budgetGroup.trim() : t.title.trim();
         const key = `${t.categoryId}_${groupName}`;
         if (!groups[key]) {
@@ -1503,52 +1513,23 @@ function updateDashboard() {
         tbody.innerHTML = html;
     }
 
-    updateAnnualChart();
+    updateDashboardChart();
 }
 
-function updateAnnualChart() {
-    const ctx = document.getElementById('annualChart');
-    if (!ctx) return;
+let dashboardChartInstance = null;
 
-    let targetYear = document.getElementById('filter-year').value;
-    const period = document.getElementById('filter-period').value;
-    if (period === 'monthly') {
-        targetYear = document.getElementById('filter-month').value.split('-')[0];
-    }
-    targetYear = parseInt(targetYear);
+function updateDashboardChart() {
+    const canvas = document.getElementById('dashboardChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
-    const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-    
-    // Inizializza array vuoti
-    const dataIncCons = new Array(12).fill(0);
-    const dataIncPrev = new Array(12).fill(0);
-    const dataExpCons = new Array(12).fill(0);
-    const dataExpPrev = new Array(12).fill(0);
-    const dataCashflow = new Array(12).fill(0);
+    const period = document.getElementById('filter-period')?.value || 'monthly';
+    const filterMonth = document.getElementById('filter-month')?.value;
+    const filterYear = document.getElementById('filter-year')?.value;
+    const catFilter = document.getElementById('filter-dash-category')?.value || 'all';
+    const typeFilter = document.getElementById('filter-dash-type')?.value || 'all';
+    const isFin = (state.activeDashboardView || 'financial') === 'financial';
 
-    let txsToAnalyze = state.transactions;
-    const catFilterElement = document.getElementById('chart-category-filter');
-    if (catFilterElement && catFilterElement.value !== 'all') {
-        txsToAnalyze = txsToAnalyze.filter(t => t.categoryId === catFilterElement.value);
-    }
-
-    // Calcola i totali per ogni singolo mese
-    txsToAnalyze.forEach(t => {
-        for (let m = 1; m <= 12; m++) {
-            const impact = getMonthlyImpact(t, targetYear, m);
-            if (impact !== 0) {
-                if (t.type === 'income') {
-                    if (t.nature === 'consuntivo') dataIncCons[m-1] += impact;
-                    else dataIncPrev[m-1] += impact;
-                } else {
-                    if (t.nature === 'consuntivo') dataExpCons[m-1] += impact;
-                    else dataExpPrev[m-1] += impact;
-                }
-            }
-        }
-    });
-
-    // Calcolo Patrimonio Netto Cumulativo (Opzione B con data odierna del sistema)
     const today = new Date();
     const todayYear = today.getFullYear();
     const todayMonth = today.getMonth() + 1;
@@ -1557,142 +1538,99 @@ function updateAnnualChart() {
     const dd = String(today.getDate()).padStart(2, '0');
     const todayStr = `${yyyy}-${mm}-${dd}`;
 
-    function getFusedCashflow(yr, m) {
-        let income = 0;
-        let expense = 0;
-        
-        txsToAnalyze.forEach(t => {
-            let include = false;
-            let foreImpact = 0;
-            if (yr < todayYear || (yr === todayYear && m < todayMonth)) {
-                // Mese passato: solo consuntivo
-                if (t.nature === 'consuntivo') {
-                    include = true;
-                    foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
-                }
-            } else if (yr > todayYear || (yr === todayYear && m > todayMonth)) {
-                // Mese futuro: solo preventivo
-                if (t.nature === 'preventivo') {
-                    include = true;
-                    foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
-                }
-            } else {
-                // Mese in corso: consuntivo fino a oggi compreso, preventivo da domani in poi
-                if (t.nature === 'consuntivo' && t.date <= todayStr) {
-                    include = true;
-                    foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
-                } else if (t.nature === 'preventivo') {
-                    const occurrenceDateStr = getTxOccurrenceDate(t, yr, m);
-                    if (occurrenceDateStr > todayStr) {
-                        include = true;
-                        foreImpact = getMonthlyImpact(t, yr, m, 'cassa');
-                    }
-                }
-            }
-            
-            if (include) {
-                if (t.type === 'income') {
-                    income += foreImpact;
-                } else {
-                    expense += foreImpact;
-                }
-            }
-        });
-        
-        return income - expense;
-    }
+    let labels = [];
+    let consuntivoData = [];
+    let budgetData = [];
 
-    // Trova l'anno minimo per il saldo iniziale
-    let minYear = targetYear;
-    txsToAnalyze.forEach(t => {
-        const y = parseInt(t.date.split('-')[0]);
-        if (y < minYear) {
-            minYear = y;
-        }
+    const filteredTxs = state.transactions.filter(t => {
+        if (catFilter !== 'all' && t.categoryId !== catFilter) return false;
+        if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+        return true;
     });
 
-    // Calcola il patrimonio netto accumulato prima dell'anno di analisi
-    let s0 = 0;
-    for (let yr = minYear; yr < targetYear; yr++) {
+    if (period === 'annual') {
+        const targetYear = parseInt(filterYear || todayYear);
+        labels = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+        consuntivoData = new Array(12).fill(0);
+        budgetData = new Array(12).fill(0);
+
         for (let m = 1; m <= 12; m++) {
-            s0 += getFusedCashflow(yr, m);
+            const ym = { year: targetYear, month: m };
+            filteredTxs.forEach(t => {
+                const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+                consuntivoData[m - 1] += vals.realeVal;
+                budgetData[m - 1] += vals.budgetVal;
+            });
         }
+    } else {
+        // Mensile
+        let targetYear = todayYear;
+        let targetMonth = todayMonth;
+        if (filterMonth) {
+            const parts = filterMonth.split('-').map(Number);
+            targetYear = parts[0];
+            targetMonth = parts[1];
+        }
+
+        const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+        labels = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`);
+        consuntivoData = new Array(daysInMonth).fill(0);
+        budgetData = new Array(daysInMonth).fill(0);
+
+        const ym = { year: targetYear, month: targetMonth };
+        filteredTxs.forEach(t => {
+            const vals = getTxValuesForMonth(t, ym, isFin, todayYear, todayMonth, todayStr);
+            const [tYr, tMo, tDy] = t.date.split('-').map(Number);
+
+            if (vals.realeVal !== 0) {
+                const dayIndex = (tYr === targetYear && tMo === targetMonth) ? Math.min(tDy, daysInMonth) - 1 : 0;
+                consuntivoData[dayIndex] += vals.realeVal;
+            }
+
+            if (vals.budgetVal !== 0) {
+                const dayIndex = (tYr === targetYear && tMo === targetMonth) ? Math.min(tDy, daysInMonth) - 1 : 0;
+                budgetData[dayIndex] += vals.budgetVal;
+            }
+        });
     }
 
-    // Popola dataCashflow accumulando mese dopo mese
-    let cumulative = s0;
-    for (let m = 1; m <= 12; m++) {
-        cumulative += getFusedCashflow(targetYear, m);
-        dataCashflow[m - 1] = cumulative;
+    // Colorazione dinamica in base al tipo selezionato
+    let consColor = '#10b981'; // Smeraldo predefinito (o Entrate)
+    let consBg = 'rgba(16, 185, 129, 0.8)';
+    let budgColor = '#6366f1'; // Indaco predefinito
+    let budgBg = 'rgba(99, 102, 241, 0.8)';
+
+    if (typeFilter === 'expense') {
+        consColor = '#ef4444'; // Rosso per Uscite Consuntivo
+        consBg = 'rgba(239, 68, 68, 0.8)';
+        budgColor = '#f59e0b'; // Ambra per Uscite Budget
+        budgBg = 'rgba(245, 158, 11, 0.8)';
     }
 
-    // Convertiamo le uscite in negativo per il grafico a specchio
-    for (let i = 0; i < 12; i++) {
-        dataExpCons[i] = -dataExpCons[i];
-        dataExpPrev[i] = -dataExpPrev[i];
+    if (dashboardChartInstance) {
+        dashboardChartInstance.destroy();
     }
 
-    if (annualChartInstance) {
-        annualChartInstance.destroy();
-    }
-
-    annualChartInstance = new Chart(ctx, {
+    dashboardChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: months,
+            labels: labels,
             datasets: [
                 {
-                    type: 'line',
-                    label: 'Patrimonio Netto',
-                    data: dataCashflow,
-                    borderColor: '#f59e0b',
-                    backgroundColor: '#f59e0b',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    pointRadius: 4,
-                    order: 0
+                    label: 'Consuntivo (Reale)',
+                    data: consuntivoData,
+                    backgroundColor: consBg,
+                    borderColor: consColor,
+                    borderWidth: 1,
+                    borderRadius: 4
                 },
                 {
-                    type: 'bar',
-                    label: 'Entrate Reali',
-                    data: dataIncCons,
-                    backgroundColor: '#10b981',
-                    borderRadius: 4,
-                    order: 2
-                },
-                {
-                    type: 'bar',
-                    label: 'Uscite Reali',
-                    data: dataExpCons,
-                    backgroundColor: '#ef4444',
-                    borderRadius: 4,
-                    order: 3
-                },
-                {
-                    type: 'line',
-                    label: 'Entrate Prev.',
-                    data: dataIncPrev,
-                    borderColor: 'rgba(16, 185, 129, 0.5)',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    order: 1
-                },
-                {
-                    type: 'line',
-                    label: 'Uscite Prev.',
-                    data: dataExpPrev,
-                    borderColor: 'rgba(239, 68, 68, 0.5)',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    order: 1
+                    label: 'Budget',
+                    data: budgetData,
+                    backgroundColor: budgBg,
+                    borderColor: budgColor,
+                    borderWidth: 1,
+                    borderRadius: 4
                 }
             ]
         },
@@ -1709,16 +1647,14 @@ function updateAnnualChart() {
                     labels: {
                         color: '#94a3b8',
                         usePointStyle: true,
-                        padding: 20
+                        padding: 15
                     }
                 },
                 tooltip: {
                     callbacks: {
                         label: function(context) {
                             let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
+                            if (label) label += ': ';
                             if (context.parsed.y !== null) {
                                 label += new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
                             }
@@ -1729,20 +1665,11 @@ function updateAnnualChart() {
             },
             scales: {
                 x: {
-                    stacked: false,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#94a3b8'
-                    }
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#94a3b8' }
                 },
                 y: {
-                    stacked: false,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        zeroLineColor: 'rgba(255, 255, 255, 0.2)'
-                    },
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: {
                         color: '#94a3b8',
                         callback: function(value) {
