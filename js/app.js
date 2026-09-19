@@ -1,10 +1,10 @@
 // Default Data
 const DEFAULT_CATEGORIES = [
-    { id: 'cat-1', name: 'Stipendio', color: '#10b981', icon: 'fa-solid fa-money-bill-wave' },
-    { id: 'cat-2', name: 'Casa', color: '#6366f1', icon: 'fa-solid fa-house' },
-    { id: 'cat-3', name: 'Spesa Alimentare', color: '#f59e0b', icon: 'fa-solid fa-cart-shopping' },
-    { id: 'cat-4', name: 'Trasporti', color: '#8b5cf6', icon: 'fa-solid fa-car' },
-    { id: 'cat-5', name: 'Svago', color: '#ec4899', icon: 'fa-solid fa-gamepad' }
+    { id: 'cat-1', name: 'Stipendio', color: '#10b981', icon: 'fa-solid fa-money-bill-wave', budgetGroups: [] },
+    { id: 'cat-2', name: 'Casa', color: '#6366f1', icon: 'fa-solid fa-house', budgetGroups: [] },
+    { id: 'cat-3', name: 'Spesa Alimentare', color: '#f59e0b', icon: 'fa-solid fa-cart-shopping', budgetGroups: [] },
+    { id: 'cat-4', name: 'Trasporti', color: '#8b5cf6', icon: 'fa-solid fa-car', budgetGroups: [] },
+    { id: 'cat-5', name: 'Svago', color: '#ec4899', icon: 'fa-solid fa-gamepad', budgetGroups: [] }
 ];
 
 // App State
@@ -16,6 +16,7 @@ let state = {
 };
 
 let annualChartInstance = null;
+let selectedCategoryIdForGroups = null;
 
 const expandedTableState = {
     voices: new Set(),
@@ -49,6 +50,34 @@ function loadLocalData() {
                 return tx;
             });
         }
+
+        // Assicura che ogni categoria abbia l'array budgetGroups
+        if (state.categories) {
+            state.categories.forEach(cat => {
+                if (!Array.isArray(cat.budgetGroups)) {
+                    cat.budgetGroups = [];
+                    migrated = true;
+                }
+            });
+        }
+
+        // Migrazione automatica delle voci di budget storiche presenti nelle transazioni
+        if (state.transactions && state.categories) {
+            state.transactions.forEach(t => {
+                if (t.categoryId && t.budgetGroup && t.budgetGroup.trim() !== '') {
+                    const cat = state.categories.find(c => c.id === t.categoryId);
+                    if (cat) {
+                        if (!Array.isArray(cat.budgetGroups)) cat.budgetGroups = [];
+                        const grp = t.budgetGroup.trim();
+                        if (!cat.budgetGroups.includes(grp)) {
+                            cat.budgetGroups.push(grp);
+                            migrated = true;
+                        }
+                    }
+                }
+            });
+        }
+
         if (migrated) {
             saveLocalData();
         }
@@ -87,6 +116,14 @@ window.updateStateFromCloud = function(cloudState) {
         cloudState.transactions = [...cloudState.transactions, ...localOnlyTxs];
         cloudState.categories = [...cloudState.categories, ...localOnlyCats];
         
+        // Assicura l'array budgetGroups sulle categorie dal cloud
+        cloudState.categories.forEach(cat => {
+            if (!Array.isArray(cat.budgetGroups)) {
+                const localCat = state.categories.find(c => c.id === cat.id);
+                cat.budgetGroups = (localCat && Array.isArray(localCat.budgetGroups)) ? [...localCat.budgetGroups] : [];
+            }
+        });
+
         state = cloudState;
         localStorage.setItem('nexbudget_data', JSON.stringify(state));
         updateDashboard();
@@ -161,16 +198,13 @@ function initUI() {
         document.getElementById('tx-id').value = '';
         document.getElementById('modal-tx-title').textContent = 'Nuova Transazione';
         populateCategorySelect();
-        populateBudgetGroupsDatalist();
         
         // Default date to today
         document.getElementById('tx-date').valueAsDate = new Date();
         
-        // Reset gruppo di budget
-        const budgetGroupInput = document.getElementById('tx-budget-group');
-        if (budgetGroupInput) {
-            budgetGroupInput.value = '';
-        }
+        // Popola e resetta gruppo di budget per la prima categoria selezionata
+        const catSelect = document.getElementById('tx-category');
+        populateTxBudgetGroupSelect(catSelect ? catSelect.value : '');
         
         // Gestione checkbox ripetizione
         const natureSelect = document.getElementById('tx-nature');
@@ -189,6 +223,13 @@ function initUI() {
             if (repeatCheck && !document.getElementById('tx-id').value) {
                 repeatCheck.checked = e.target.value === 'preventivo';
             }
+        });
+    }
+
+    const txCategorySelect = document.getElementById('tx-category');
+    if (txCategorySelect) {
+        txCategorySelect.addEventListener('change', (e) => {
+            populateTxBudgetGroupSelect(e.target.value);
         });
     }
 
@@ -301,6 +342,19 @@ function initUI() {
     });
 
     document.getElementById('form-category').addEventListener('submit', handleCategorySubmit);
+
+    // Budget Groups for Categories
+    const formAddGroup = document.getElementById('form-add-budget-group');
+    if (formAddGroup) {
+        formAddGroup.addEventListener('submit', handleAddBudgetGroupSubmit);
+    }
+    const btnCloseGroups = document.getElementById('btn-close-budget-groups');
+    if (btnCloseGroups) {
+        btnCloseGroups.addEventListener('click', () => {
+            selectedCategoryIdForGroups = null;
+            renderCategories();
+        });
+    }
 
     // Settings
     document.getElementById('btn-clear-data').addEventListener('click', () => {
@@ -615,14 +669,8 @@ function editTransaction(id) {
     document.getElementById('tx-date').value = tx.date;
     
     populateCategorySelect();
-    populateBudgetGroupsDatalist();
     document.getElementById('tx-category').value = tx.categoryId;
-
-    // Popola il campo del gruppo di budget
-    const budgetGroupInput = document.getElementById('tx-budget-group');
-    if (budgetGroupInput) {
-        budgetGroupInput.value = tx.budgetGroup || '';
-    }
+    populateTxBudgetGroupSelect(tx.categoryId, tx.budgetGroup || '');
 
     // Popola lo stato del checkbox ripetizione
     const repeatCheck = document.getElementById('tx-repeat-yearly');
@@ -789,43 +837,54 @@ function populateCategorySelect() {
     if (tableSelect) tableSelect.value = currentTableFilter;
 }
 
-function populateBudgetGroupsDatalist() {
-    const datalist = document.getElementById('budget-groups-list');
-    if (!datalist) return;
-    
-    datalist.innerHTML = '';
-    
-    // Raccoglie tutti i gruppi budget e titoli dei preventivi/accantonamenti
-    const groups = new Set();
-    state.transactions.forEach(t => {
-        if (t.nature === 'preventivo' || t.nature === 'accantonamento') {
-            if (t.budgetGroup && t.budgetGroup.trim() !== '') {
-                groups.add(t.budgetGroup.trim());
-            } else if (t.title && t.title.trim() !== '') {
-                groups.add(t.title.trim());
-            }
+function populateTxBudgetGroupSelect(categoryId, selectedValue = '') {
+    const select = document.getElementById('tx-budget-group');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Nessun gruppo (Opzionale) --</option>';
+
+    if (!categoryId) return;
+
+    const cat = state.categories.find(c => c.id === categoryId);
+    const groups = (cat && Array.isArray(cat.budgetGroups)) ? cat.budgetGroups : [];
+
+    let hasSelected = false;
+    groups.forEach(grp => {
+        const opt = document.createElement('option');
+        opt.value = grp;
+        opt.textContent = grp;
+        if (selectedValue && grp === selectedValue) {
+            opt.selected = true;
+            hasSelected = true;
         }
+        select.appendChild(opt);
     });
-    
-    groups.forEach(gName => {
-        const option = document.createElement('option');
-        option.value = gName;
-        datalist.appendChild(option);
-    });
+
+    // Se esiste un valore precedente (es. transazione esistente o legacy) non presente nella lista
+    if (selectedValue && !hasSelected) {
+        const opt = document.createElement('option');
+        opt.value = selectedValue;
+        opt.textContent = `${selectedValue} (personalizzato)`;
+        opt.selected = true;
+        select.appendChild(opt);
+    }
 }
 
 function handleCategorySubmit(e) {
     e.preventDefault();
     
     const id = document.getElementById('cat-id').value || `cat-${Date.now()}`;
+    const existingIndex = state.categories.findIndex(c => c.id === id);
+    const existingCat = existingIndex >= 0 ? state.categories[existingIndex] : null;
+
     const cat = {
         id: id,
-        name: document.getElementById('cat-name').value,
+        name: document.getElementById('cat-name').value.trim(),
         color: document.getElementById('cat-color').value,
-        icon: document.getElementById('cat-icon').value
+        icon: document.getElementById('cat-icon').value,
+        budgetGroups: (existingCat && Array.isArray(existingCat.budgetGroups)) ? existingCat.budgetGroups : []
     };
 
-    const existingIndex = state.categories.findIndex(c => c.id === id);
     if (existingIndex >= 0) {
         state.categories[existingIndex] = cat;
     } else {
@@ -845,6 +904,9 @@ function deleteCategory(id) {
     }
 
     if (confirm('Eliminare questa categoria?')) {
+        if (selectedCategoryIdForGroups === id) {
+            selectedCategoryIdForGroups = null;
+        }
         state.categories = state.categories.filter(c => c.id !== id);
         saveLocalData();
         renderCategories();
@@ -864,26 +926,265 @@ function editCategory(id) {
     document.getElementById('modal-category').classList.remove('hidden');
 }
 
+function toggleCategoryBudgetGroups(catId) {
+    if (selectedCategoryIdForGroups === catId) {
+        selectedCategoryIdForGroups = null;
+    } else {
+        selectedCategoryIdForGroups = catId;
+    }
+    renderCategories();
+    if (selectedCategoryIdForGroups) {
+        const container = document.getElementById('category-budget-groups-container');
+        if (container) {
+            container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+}
+
+function renderSelectedCategoryBudgetGroups() {
+    const container = document.getElementById('category-budget-groups-container');
+    if (!container) return;
+
+    if (!selectedCategoryIdForGroups) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const cat = state.categories.find(c => c.id === selectedCategoryIdForGroups);
+    if (!cat) {
+        container.style.display = 'none';
+        selectedCategoryIdForGroups = null;
+        return;
+    }
+
+    container.style.display = 'block';
+
+    // Header info
+    const badgeEl = document.getElementById('selected-cat-badge');
+    const iconEl = document.getElementById('selected-cat-icon');
+    const titleEl = document.getElementById('selected-cat-title');
+    
+    if (badgeEl) badgeEl.style.background = cat.color;
+    if (iconEl) iconEl.className = cat.icon;
+    if (titleEl) titleEl.textContent = `Voci di Budget: ${cat.name}`;
+
+    // Reset input
+    const inputNew = document.getElementById('input-new-budget-group');
+    if (inputNew) inputNew.value = '';
+
+    const listContainer = document.getElementById('budget-groups-list-container');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    const groups = cat.budgetGroups || [];
+
+    if (groups.length === 0) {
+        listContainer.innerHTML = `
+            <div class="budget-groups-empty">
+                <i class="fa-regular fa-folder-open" style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5; display: block;"></i>
+                Nessuna voce/gruppo di budget configurata per "${cat.name}".<br>
+                Aggiungine una con il campo qui sopra.
+            </div>
+        `;
+        return;
+    }
+
+    groups.forEach(grp => {
+        const txCount = (state.transactions || []).filter(t => t.categoryId === cat.id && t.budgetGroup === grp).length;
+        const txBadgeText = txCount === 1 ? '1 transazione' : `${txCount} transazioni`;
+
+        const item = document.createElement('div');
+        item.className = 'budget-group-item';
+
+        const left = document.createElement('div');
+        left.className = 'budget-group-left';
+
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-layer-group';
+        icon.style.color = cat.color;
+        icon.style.opacity = '0.85';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'budget-group-name';
+        nameSpan.textContent = grp;
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'budget-group-badge';
+        badgeSpan.textContent = txBadgeText;
+
+        left.appendChild(icon);
+        left.appendChild(nameSpan);
+        left.appendChild(badgeSpan);
+
+        const actions = document.createElement('div');
+        actions.className = 'budget-group-actions';
+
+        const btnRename = document.createElement('button');
+        btnRename.type = 'button';
+        btnRename.className = 'btn-icon';
+        btnRename.title = 'Rinomina voce';
+        btnRename.innerHTML = '<i class="fa-solid fa-pen"></i>';
+        btnRename.addEventListener('click', (e) => {
+            e.stopPropagation();
+            renameBudgetGroup(cat.id, grp);
+        });
+
+        const btnDelete = document.createElement('button');
+        btnDelete.type = 'button';
+        btnDelete.className = 'btn-icon';
+        btnDelete.style.color = 'var(--danger)';
+        btnDelete.title = 'Elimina voce';
+        btnDelete.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        btnDelete.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteBudgetGroup(cat.id, grp);
+        });
+
+        actions.appendChild(btnRename);
+        actions.appendChild(btnDelete);
+
+        item.appendChild(left);
+        item.appendChild(actions);
+
+        listContainer.appendChild(item);
+    });
+}
+
+function handleAddBudgetGroupSubmit(e) {
+    e.preventDefault();
+    if (!selectedCategoryIdForGroups) return;
+
+    const input = document.getElementById('input-new-budget-group');
+    if (!input) return;
+
+    const groupName = input.value.trim();
+    if (!groupName) return;
+
+    const cat = state.categories.find(c => c.id === selectedCategoryIdForGroups);
+    if (!cat) return;
+
+    if (!Array.isArray(cat.budgetGroups)) cat.budgetGroups = [];
+
+    // Controllo duplicati case-insensitive
+    if (cat.budgetGroups.some(g => g.toLowerCase() === groupName.toLowerCase())) {
+        alert(`La voce "${groupName}" esiste già per questa categoria.`);
+        input.focus();
+        return;
+    }
+
+    cat.budgetGroups.push(groupName);
+    saveLocalData();
+    renderCategories();
+    input.value = '';
+    input.focus();
+}
+
+function renameBudgetGroup(catId, oldName) {
+    const cat = state.categories.find(c => c.id === catId);
+    if (!cat || !Array.isArray(cat.budgetGroups)) return;
+
+    const newName = prompt(`Rinomina la voce "${oldName}":`, oldName);
+    if (!newName) return;
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+
+    // Controllo duplicati
+    if (cat.budgetGroups.some(g => g.toLowerCase() === trimmed.toLowerCase() && g !== oldName)) {
+        alert(`Esiste già una voce "${trimmed}" per questa categoria.`);
+        return;
+    }
+
+    const idx = cat.budgetGroups.indexOf(oldName);
+    if (idx >= 0) {
+        cat.budgetGroups[idx] = trimmed;
+    }
+
+    // Aggiorna le transazioni collegate
+    let updatedTxCount = 0;
+    if (state.transactions) {
+        state.transactions.forEach(t => {
+            if (t.categoryId === catId && t.budgetGroup === oldName) {
+                t.budgetGroup = trimmed;
+                updatedTxCount++;
+            }
+        });
+    }
+
+    saveLocalData();
+    renderCategories();
+    if (updatedTxCount > 0) {
+        renderTransactions();
+        updateDashboard();
+    }
+}
+
+function deleteBudgetGroup(catId, groupName) {
+    const cat = state.categories.find(c => c.id === catId);
+    if (!cat || !Array.isArray(cat.budgetGroups)) return;
+
+    const txsUsingGroup = (state.transactions || []).filter(t => t.categoryId === catId && t.budgetGroup === groupName);
+
+    let confirmMsg = `Eliminare la voce di budget "${groupName}"?`;
+    if (txsUsingGroup.length > 0) {
+        confirmMsg = `Attenzione: ci sono ${txsUsingGroup.length} transazione/i associate alla voce "${groupName}".\nEliminando la voce, il campo gruppo verrà rimosso da queste transazioni. Vuoi procedere?`;
+    }
+
+    if (!confirm(confirmMsg)) return;
+
+    cat.budgetGroups = cat.budgetGroups.filter(g => g !== groupName);
+
+    if (txsUsingGroup.length > 0) {
+        txsUsingGroup.forEach(t => {
+            t.budgetGroup = '';
+        });
+    }
+
+    saveLocalData();
+    renderCategories();
+    if (txsUsingGroup.length > 0) {
+        renderTransactions();
+        updateDashboard();
+    }
+}
+
 function renderCategories() {
     const grid = document.getElementById('categories-grid');
+    if (!grid) return;
     grid.innerHTML = '';
+
+    // Se la categoria selezionata non esiste più, resettiamola
+    if (selectedCategoryIdForGroups && !state.categories.some(c => c.id === selectedCategoryIdForGroups)) {
+        selectedCategoryIdForGroups = null;
+    }
 
     state.categories.forEach(cat => {
         const div = document.createElement('div');
-        div.className = 'glass-panel category-card';
+        const isSelected = selectedCategoryIdForGroups === cat.id;
+        div.className = `glass-panel category-card ${isSelected ? 'selected' : ''}`;
+        
+        const groupsCount = (cat.budgetGroups && cat.budgetGroups.length) ? cat.budgetGroups.length : 0;
+        const groupsLabel = groupsCount === 1 ? '1 voce' : `${groupsCount} voci`;
+
         div.innerHTML = `
             <div class="cat-icon-lg" style="background: ${cat.color}">
                 <i class="${cat.icon}"></i>
             </div>
-            <h3>${cat.name}</h3>
-            <div style="margin-top: auto; display: flex; gap: 1rem;">
-                <button class="btn-icon" onclick="editCategory('${cat.id}')"><i class="fa-solid fa-pen-to-square"></i></button>
-                <button class="btn-icon" onclick="deleteCategory('${cat.id}')" style="color: var(--danger)"><i class="fa-solid fa-trash"></i></button>
+            <h3 style="margin: 0.25rem 0;">${cat.name}</h3>
+            <div class="cat-group-pill"><i class="fa-solid fa-list-check"></i> ${groupsLabel}</div>
+            <div style="margin-top: auto; display: flex; gap: 1rem; position: relative; z-index: 2;">
+                <button type="button" class="btn-icon" onclick="event.stopPropagation(); editCategory('${cat.id}')" title="Modifica Categoria"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button type="button" class="btn-icon" onclick="event.stopPropagation(); deleteCategory('${cat.id}')" style="color: var(--danger)" title="Elimina Categoria"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
+
+        div.addEventListener('click', () => {
+            toggleCategoryBudgetGroups(cat.id);
+        });
+
         grid.appendChild(div);
     });
 
+    renderSelectedCategoryBudgetGroups();
     populateCategorySelect();
 }
 
