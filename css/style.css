@@ -871,3 +871,82 @@ input[type="color"] {
     font-weight: 400;
 }
 
+/* Category Selected & Budget Groups Styling */
+.category-card {
+    position: relative;
+    border: 2px solid transparent;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.category-card.selected {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.category-card .cat-group-pill {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    margin-top: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.budget-group-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.2rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 0.6rem;
+    transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.budget-group-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateX(4px);
+}
+
+.budget-group-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.budget-group-name {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.budget-group-badge {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 12px;
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+    font-weight: 500;
+}
+
+.budget-group-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.budget-groups-empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+}
+
+
