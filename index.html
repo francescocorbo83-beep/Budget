@@ -163,6 +163,11 @@
                         </select>
                     </div>
                     <div class="filter-group">
+                        <select id="filter-tx-group">
+                            <option value="all">Tutte le Voci</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
                         <select id="filter-tx-type">
                             <option value="all">Tutti i Tipi</option>
                             <option value="income">Entrata</option>
@@ -200,7 +205,10 @@
                         <span id="filter-tx-amount-and" style="display: none; color: var(--text-secondary);">e</span>
                         <input type="number" id="filter-tx-amount-2" placeholder="€" style="display: none; width: 100px;">
                     </div>
-                    <div class="filter-group" style="margin-left: auto;">
+                    <div class="filter-group" style="margin-left: auto; display: flex; align-items: center; gap: 0.75rem;">
+                        <span id="tx-count-badge" style="font-size: 0.85rem; color: var(--text-secondary); background: rgba(255, 255, 255, 0.04); padding: 0.45rem 0.85rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); white-space: nowrap;">
+                            <i class="fa-solid fa-receipt" style="margin-right: 0.35rem; color: var(--primary);"></i><span id="tx-visible-count">0 transazioni</span>
+                        </span>
                         <button class="btn btn-secondary" id="btn-reset-filters"><i class="fa-solid fa-eraser"></i> Reset Filtri</button>
                     </div>
                 </div>
@@ -212,6 +220,7 @@
                                     <th>Data</th>
                                     <th>Titolo</th>
                                     <th>Categoria</th>
+                                    <th>Voce di Budget</th>
                                     <th>Tipo</th>
                                     <th>Natura</th>
                                     <th>Frequenza</th>
