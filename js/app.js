@@ -24,6 +24,16 @@ const expandedTableState = {
     groups: new Set()
 };
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     loadLocalData();
@@ -282,11 +292,20 @@ function initUI() {
     }
 
     // Transactions Table Filters
-    const txFilters = ['filter-tx-date-start', 'filter-tx-date-end', 'filter-tx-category', 'filter-tx-type', 'filter-tx-nature', 'filter-tx-frequency'];
+    const txFilters = ['filter-tx-date-start', 'filter-tx-date-end', 'filter-tx-group', 'filter-tx-type', 'filter-tx-nature', 'filter-tx-frequency'];
     txFilters.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', renderTransactions);
     });
+
+    const filterCatEl = document.getElementById('filter-tx-category');
+    if (filterCatEl) {
+        filterCatEl.addEventListener('change', () => {
+            populateFilterBudgetGroupSelect();
+            renderTransactions();
+        });
+    }
+
     const titleFilter = document.getElementById('filter-tx-title');
     if (titleFilter) titleFilter.addEventListener('input', renderTransactions);
     
@@ -324,6 +343,9 @@ function initUI() {
             document.getElementById('filter-tx-date-end').value = '';
             document.getElementById('filter-tx-title').value = '';
             document.getElementById('filter-tx-category').value = 'all';
+            populateFilterBudgetGroupSelect();
+            const groupFilterEl = document.getElementById('filter-tx-group');
+            if (groupFilterEl) groupFilterEl.value = 'all';
             document.getElementById('filter-tx-type').value = 'all';
             document.getElementById('filter-tx-nature').value = 'all';
             document.getElementById('filter-tx-frequency').value = 'all';
@@ -541,7 +563,10 @@ function switchView(viewId) {
     document.getElementById('page-title').textContent = titles[viewId];
 
     if (viewId === 'dashboard') updateDashboard();
-    if (viewId === 'transactions') renderTransactions();
+    if (viewId === 'transactions') {
+        populateFilterBudgetGroupSelect();
+        renderTransactions();
+    }
     if (viewId === 'categories') renderCategories();
 }
 
@@ -692,6 +717,7 @@ function renderTransactions() {
     const dateEnd = document.getElementById('filter-tx-date-end')?.value;
     const searchTitle = document.getElementById('filter-tx-title')?.value.toLowerCase();
     const catFilter = document.getElementById('filter-tx-category')?.value;
+    const groupFilter = document.getElementById('filter-tx-group')?.value;
     const typeFilter = document.getElementById('filter-tx-type')?.value;
     const natureFilter = document.getElementById('filter-tx-nature')?.value;
     const freqFilter = document.getElementById('filter-tx-frequency')?.value;
@@ -709,6 +735,13 @@ function renderTransactions() {
         
         // Selects
         if (catFilter && catFilter !== 'all' && tx.categoryId !== catFilter) return false;
+        if (groupFilter && groupFilter !== 'all') {
+            if (groupFilter === '__none__') {
+                if (tx.budgetGroup && tx.budgetGroup.trim() !== '') return false;
+            } else {
+                if (!tx.budgetGroup || tx.budgetGroup.trim() !== groupFilter) return false;
+            }
+        }
         if (typeFilter && typeFilter !== 'all' && tx.type !== typeFilter) return false;
         if (natureFilter && natureFilter !== 'all' && tx.nature !== natureFilter) return false;
         if (freqFilter && freqFilter !== 'all' && tx.frequency !== freqFilter) return false;
@@ -731,6 +764,18 @@ function renderTransactions() {
     // Sort by date descending
     const sorted = filteredTxs.sort((a, b) => b.date.localeCompare(a.date));
 
+    // Aggiorna contatore transazioni visibili
+    const countEl = document.getElementById('tx-visible-count');
+    if (countEl) {
+        const visibleCount = sorted.length;
+        const totalCount = (state.transactions || []).length;
+        if (visibleCount === totalCount) {
+            countEl.textContent = `${visibleCount} ${visibleCount === 1 ? 'transazione' : 'transazioni'}`;
+        } else {
+            countEl.textContent = `${visibleCount} di ${totalCount} ${totalCount === 1 ? 'transazione' : 'transazioni'}`;
+        }
+    }
+
     sorted.forEach(tx => {
         const cat = state.categories.find(c => c.id === tx.categoryId) || { name: 'N/D', color: '#ccc', icon: 'fa-tag' };
         const tr = document.createElement('tr');
@@ -743,6 +788,12 @@ function renderTransactions() {
             <td>${formattedDate}</td>
             <td><strong>${tx.title}</strong></td>
             <td><span class="badge badge-cat" style="background: ${cat.color}40; color: ${cat.color}"><i class="${cat.icon}"></i> ${cat.name}</span></td>
+            <td>
+                ${tx.budgetGroup && tx.budgetGroup.trim() !== '' 
+                    ? `<span class="badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid rgba(255, 255, 255, 0.1);"><i class="fa-solid fa-layer-group" style="font-size: 0.75rem; margin-right: 0.35rem; color: ${cat.color};"></i>${escapeHtml(tx.budgetGroup.trim())}</span>`
+                    : `<span style="color: var(--text-secondary); opacity: 0.4; font-size: 0.85rem;">-</span>`
+                }
+            </td>
             <td><span class="badge ${tx.type === 'income' ? 'badge-income' : 'badge-expense'}">${tx.type === 'income' ? 'Entrata' : 'Uscita'}</span></td>
             <td>
                 <span class="badge ${tx.nature === 'preventivo' ? 'badge-prev' : tx.nature === 'consuntivo' ? 'badge-cons' : 'badge-acc'}">${tx.nature === 'preventivo' ? 'Budget' : tx.nature === 'consuntivo' ? 'Consuntivo' : 'Accantonamento'}</span>
@@ -835,6 +886,57 @@ function populateCategorySelect() {
     
     if (dashSelect) dashSelect.value = currentDashFilter;
     if (tableSelect) tableSelect.value = currentTableFilter;
+    populateFilterBudgetGroupSelect();
+}
+
+function populateFilterBudgetGroupSelect() {
+    const groupSelect = document.getElementById('filter-tx-group');
+    if (!groupSelect) return;
+
+    const currentVal = groupSelect.value || 'all';
+    const catFilter = document.getElementById('filter-tx-category')?.value || 'all';
+
+    groupSelect.innerHTML = '<option value="all">Tutte le Voci</option><option value="__none__">-- Nessuna Voce --</option>';
+
+    const groups = new Set();
+
+    if (catFilter === 'all') {
+        (state.categories || []).forEach(c => {
+            if (Array.isArray(c.budgetGroups)) {
+                c.budgetGroups.forEach(g => { if (g && g.trim()) groups.add(g.trim()); });
+            }
+        });
+        (state.transactions || []).forEach(t => {
+            if (t.budgetGroup && t.budgetGroup.trim()) {
+                groups.add(t.budgetGroup.trim());
+            }
+        });
+    } else {
+        const cat = (state.categories || []).find(c => c.id === catFilter);
+        if (cat && Array.isArray(cat.budgetGroups)) {
+            cat.budgetGroups.forEach(g => { if (g && g.trim()) groups.add(g.trim()); });
+        }
+        (state.transactions || []).forEach(t => {
+            if (t.categoryId === catFilter && t.budgetGroup && t.budgetGroup.trim()) {
+                groups.add(t.budgetGroup.trim());
+            }
+        });
+    }
+
+    const sortedGroups = Array.from(groups).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    sortedGroups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        groupSelect.appendChild(opt);
+    });
+
+    if (currentVal === '__none__' || groups.has(currentVal)) {
+        groupSelect.value = currentVal;
+    } else {
+        groupSelect.value = 'all';
+    }
 }
 
 function populateTxBudgetGroupSelect(categoryId, selectedValue = '') {
